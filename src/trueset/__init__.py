@@ -19,6 +19,10 @@ try:  # optional -- only if the [sql] extra (sqlalchemy) is installed
     from .backends.sqlalchemy_backend import SQLAlchemyBackend
 except Exception:  # pragma: no cover
     SQLAlchemyBackend = None  # type: ignore
+try:  # optional -- results-history persistence (needs sqlalchemy)
+    from .history import ResultStore
+except Exception:  # pragma: no cover
+    ResultStore = None  # type: ignore
 from .profile import DatasetProfile, profile_dataframe, suggest_from_profile
 from .reconcile import (
     ReconciliationCheck,
@@ -40,6 +44,7 @@ __all__ = [
     "PandasBackend",
     "DuckDBBackend",
     "SQLAlchemyBackend",
+    "ResultStore",
     "build_check",
     "available_checks",
     "GovernanceMeta",

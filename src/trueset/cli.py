@@ -83,6 +83,20 @@ def _primary_backend(data: str | None, url: str | None, table: str | None):
     return PandasBackend(_load_data(data))
 
 
+def _open_store(url: str):
+    """Open a ResultStore, with a friendly error if [sql] is missing."""
+    try:
+        from .history import ResultStore
+    except Exception as exc:  # sqlalchemy not installed
+        raise click.ClickException(
+            "history needs the [sql] extra:  pip install 'trueset[sql]'"
+        ) from exc
+    try:
+        return ResultStore(url)
+    except Exception as exc:
+        raise click.ClickException(f"could not open results store at {url}: {exc}") from exc
+
+
 def _reference_backend(value: str):
     """A --ref value is either a file path or a SQL 'url::table' spec."""
     if "://" in value:  # looks like a SQLAlchemy URL
@@ -135,12 +149,25 @@ def cli() -> None:
 @click.option("--url", default=None, help="SQLAlchemy URL of a database to validate in place.")
 @click.option("--table", default=None, help="Table name to validate (with --url).")
 @click.option("--checks", "checks_path", required=True, help="Path to a checks YAML file.")
+@click.option("--save", "save_url", default=None, help="Persist this run to a results store (SQLAlchemy URL).")
 @click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON.")
-def run(data: str | None, url: str | None, table: str | None, checks_path: str, as_json: bool) -> None:
+def run(
+    data: str | None,
+    url: str | None,
+    table: str | None,
+    checks_path: str,
+    save_url: str | None,
+    as_json: bool,
+) -> None:
     """Run a check suite against a dataset (a file, or a SQL table via --url/--table)."""
     backend = _primary_backend(data, url, table)
     suite = _load_suite(checks_path)
     result = suite.run(backend)
+
+    if save_url:
+        run_id = _open_store(save_url).save(result, dataset=result.dataset or data or table)
+        if not as_json:
+            console.print(f"[dim]saved run {run_id} to {save_url}[/]")
 
     if as_json:
         console.print_json(json.dumps(result.to_dict()))
@@ -333,6 +360,35 @@ def profile(data: str) -> None:
     for c in prof.columns:
         table.add_row(
             c.name, c.dtype, c.inferred, str(c.nulls), str(c.distinct), str(c.is_unique)
+        )
+    console.print(table)
+
+
+@cli.command()
+@click.option("--store", "store_url", required=True, help="Results store (SQLAlchemy URL) to read.")
+@click.option("--suite", default=None, help="Filter to one suite name.")
+@click.option("--limit", default=20, show_default=True, help="Max runs to show.")
+@click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON.")
+def history(store_url: str, suite: str | None, limit: int, as_json: bool) -> None:
+    """Show past runs from a results store (see `run --save`)."""
+    store = _open_store(store_url)
+    runs = store.runs(suite=suite, limit=limit)
+
+    if as_json:
+        console.print_json(json.dumps(runs))
+        return
+    if not runs:
+        console.print("[dim]no runs found[/]")
+        return
+
+    table = Table(title=f"trueset history :: {store_url}")
+    for col in ("time (UTC)", "suite", "dataset", "rows", "pass", "fail", "error", "verdict"):
+        table.add_column(col)
+    for r in runs:
+        verdict = "[green]PASS[/]" if r["passed"] else "[red]FAIL[/]"
+        table.add_row(
+            str(r["ts"]), r["suite"], r["dataset"] or "-", str(r["rows"] if r["rows"] is not None else "-"),
+            str(r["n_pass"]), str(r["n_fail"]), str(r["n_error"]), verdict,
         )
     console.print(table)
 

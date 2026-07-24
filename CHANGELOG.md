@@ -7,6 +7,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **Results-history persistence** (`ResultStore`, needs `[sql]`). Persist every
+  run to any SQLAlchemy database (SQLite → Postgres/Snowflake) as an auditable
+  trail: `trueset run … --save <url>` and `trueset history --store <url>`. Two
+  tables (`trueset_runs`, `trueset_results`) keep run verdicts, counts, row
+  volume, and full per-check evidence (observed + governance metadata).
 - **Governance layer** (additive, non-breaking). Any check may carry optional
   `owner` / `sensitivity` / `regulation` / `tags` / `description`. `split_meta`
   separates these from check kwargs in `build_check`, they ride onto every
