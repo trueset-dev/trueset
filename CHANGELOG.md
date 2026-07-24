@@ -7,6 +7,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **Real-Postgres parity, verified.** The "runs on any warehouse" claim is now
+  proven against an actual Postgres 16 (not just SQLite): a `tests/test_postgres.py`
+  parity suite (skipped unless `TRUESET_PG_URL` is set) and a CI job that runs it
+  against a Postgres service container — exercising the dialect-specific paths
+  (`~` regex operator, casts, window functions).
 - **Failing-row extraction + quarantine.** Checks expose a per-row `failure_spec()`
   and backends implement `failing_rows(spec, limit)` (pandas/DuckDB/SQLAlchemy,
   proven identical). `trueset.split(df, suite)` partitions a batch into clean and

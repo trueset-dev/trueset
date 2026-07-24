@@ -23,3 +23,31 @@ jobs:
         run: ruff check .
       - name: Test
         run: pytest -q
+
+  postgres:
+    # Prove the "runs on any warehouse" claim against a real Postgres, not just
+    # SQLite -- exercises the ~ regex operator, casts, and window functions.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -e ".[dev,sql]" "psycopg[binary]>=3.1"
+      - name: Postgres parity
+        env:
+          TRUESET_PG_URL: postgresql+psycopg://postgres:postgres@localhost:5432/postgres
+        run: pytest -q tests/test_postgres.py
