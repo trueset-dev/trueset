@@ -278,6 +278,23 @@ trueset monitor --store "postgresql://…/trueset_history" --suite orders_qualit
   past runs and exits non-zero on a >`sigma`-σ anomaly (a silent 90% drop in
   rows is caught even when every row that *is* there passes every check).
 
+## Works with your stack (dbt today)
+
+trueset composes with the tools you already run — it doesn't replace them. If you
+have dbt tests, adopt trueset **without rewriting a single one**:
+
+```bash
+trueset import-dbt --schema models/schema.yml --model orders --out orders.yml
+trueset run --url "$WAREHOUSE" --table analytics.orders --checks orders.yml
+```
+
+`not_null`/`unique` map directly, `accepted_values`→`in_set`,
+`relationships`→`referential_integrity`, and dbt test severity is preserved.
+Custom/singular dbt tests are reported (never silently dropped), and every
+imported check is validated so the output always runs. Point trueset at the
+tables dbt builds and you also get cross-engine portability, reconciliation
+against the source, governance, and monitoring — on top of your existing tests.
+
 ## Built-in checks
 
 `columns_exist`, `not_null`, `unique`, `in_set`, `in_range`, `matches_regex`,

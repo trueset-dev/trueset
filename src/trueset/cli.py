@@ -432,6 +432,54 @@ def monitor(store_url: str, suite: str, dataset: str | None, sigma: float, as_js
     sys.exit(1 if verdict.get("anomaly") else 0)
 
 
+@cli.command(name="import-dbt")
+@click.option("--schema", "schema_path", required=True, help="Path to a dbt schema.yml.")
+@click.option("--model", default=None, help="Which model/source to import (needed if the file has several).")
+@click.option("--out", "out_path", default=None, help="Write the trueset suite here (else print).")
+def import_dbt(schema_path: str, model: str | None, out_path: str | None) -> None:
+    """Convert dbt tests (schema.yml) into a runnable trueset suite.
+
+    Adopt trueset without rewriting: not_null/unique/accepted_values/relationships
+    map to trueset checks. Unmappable dbt tests are reported, never silently
+    dropped, and every produced check is validated so the output always runs.
+    """
+    import yaml as _yaml
+
+    from .interop import import_dbt_file
+
+    try:
+        imported = import_dbt_file(schema_path)
+    except (OSError, ValueError, _yaml.YAMLError) as exc:
+        raise click.ClickException(f"could not import {schema_path}: {exc}") from exc
+
+    if not imported.suites:
+        raise click.ClickException("no dbt models or sources found in that schema.yml")
+
+    if model:
+        if model not in imported.suites:
+            known = ", ".join(sorted(imported.suites))
+            raise click.ClickException(f"'{model}' not found. available: {known}")
+        chosen = {model: imported.suites[model]}
+    elif len(imported.suites) == 1:
+        chosen = imported.suites
+    else:
+        known = ", ".join(sorted(imported.suites))
+        raise click.ClickException(
+            f"schema has several models; pick one with --model. available: {known}"
+        )
+
+    (name, suite) = next(iter(chosen.items()))
+    for note in imported.skipped:
+        console.print(f"[yellow]skipped[/] {note}")
+
+    text = _yaml.safe_dump(suite, sort_keys=False)
+    if out_path:
+        Path(out_path).write_text(text)
+        console.print(f"[green]wrote[/] {out_path}  ({len(suite['checks'])} checks from '{name}')")
+    else:
+        console.print(text)
+
+
 @cli.command(name="list-checks")
 def list_checks() -> None:
     """List available check types."""

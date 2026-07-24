@@ -7,6 +7,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **dbt interop.** `trueset import-dbt --schema schema.yml [--model X]` converts
+  dbt column tests into a runnable trueset suite: `not_null`/`unique` map
+  directly, `accepted_values`→`in_set`, `relationships`→`referential_integrity`;
+  dbt test severity is preserved; both `tests:` and `data_tests:` keys and dbt
+  `sources` are supported. Unmappable/custom dbt tests are reported (not silently
+  dropped) and every produced check is validated through `build_check`. Adopt
+  trueset without rewriting your existing tests.
 - **Data classification.** The profiler now infers a suggested `sensitivity`
   (pii/pci) for high-precision patterns — email, phone, US SSN, credit card
   (length + Luhn, incl. bare-integer columns), IBAN. `trueset profile` shows a
