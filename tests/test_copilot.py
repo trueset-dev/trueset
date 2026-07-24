@@ -10,8 +10,8 @@ import json
 import pandas as pd
 import pytest
 
-from assay.copilot import checks_from_profile, checks_from_text
-from assay.profile import profile_dataframe, suggest_from_profile
+from trueset.copilot import checks_from_profile, checks_from_text
+from trueset.profile import profile_dataframe, suggest_from_profile
 
 
 @pytest.fixture
@@ -44,7 +44,7 @@ def test_heuristic_suggester(df):
     assert "in_range" in types        # amount >= 0
     assert "matches_regex" in types   # email
     # every suggested check must be buildable
-    from assay.checks import build_check
+    from trueset.checks import build_check
     for spec in suite["checks"]:
         build_check(dict(spec))
 

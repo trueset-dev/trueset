@@ -11,8 +11,8 @@ from pathlib import Path
 import duckdb
 import pandas as pd
 
-from assay import PandasBackend, Suite
-from assay.backends.duckdb_backend import DuckDBBackend
+from trueset import PandasBackend, Suite
+from trueset.backends.duckdb_backend import DuckDBBackend
 
 EX = Path(__file__).resolve().parent
 suite = Suite.from_yaml(EX / "reconcile.yml")

@@ -7,7 +7,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
-- `py.typed` marker so downstream projects get type information when they import assay.
+- `py.typed` marker so downstream projects get type information when they import trueset.
 - GitHub composite Action (`action.yml`) — add data-quality gates to any CI in a few lines.
 - Packaging metadata: project URLs, trove classifiers, expanded keywords.
 - `SuiteLoadError` with actionable messages; the CLI now reports bad YAML, missing

@@ -1,8 +1,8 @@
 """Command line interface.
 
-    assay run --data orders.csv --checks checks.yml
-    assay run --data orders.csv --checks checks.yml --json
-    assay list-checks
+    trueset run --data orders.csv --checks checks.yml
+    trueset run --data orders.csv --checks checks.yml --json
+    trueset list-checks
 
 Exit code is non-zero when any ERROR-severity check fails, so it drops
 straight into CI / dbt / Airflow.
@@ -54,7 +54,7 @@ def _load_suite(path: str) -> Suite:
 
 
 def _render(result) -> None:
-    table = Table(title=f"assay :: {result.name}", show_lines=False)
+    table = Table(title=f"trueset :: {result.name}", show_lines=False)
     for col in ("check", "column", "status", "sev", "failing / total", "detail"):
         table.add_column(col)
 
@@ -85,7 +85,7 @@ def _render(result) -> None:
 @click.group()
 @click.version_option()
 def cli() -> None:
-    """assay -- portable data quality checks."""
+    """trueset -- portable data quality checks."""
 
 
 @cli.command()

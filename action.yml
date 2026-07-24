@@ -1,5 +1,5 @@
-name: "assay data quality"
-description: "Run an assay check suite against a dataset and fail the job on error-severity failures."
+name: "trueset data quality"
+description: "Run a trueset check suite against a dataset and fail the job on error-severity failures."
 branding:
   icon: "check-circle"
   color: "purple"
@@ -16,7 +16,7 @@ inputs:
     required: false
     default: "false"
   python-version:
-    description: "Python version to run assay with."
+    description: "Python version to run trueset with."
     required: false
     default: "3.12"
 
@@ -28,14 +28,14 @@ runs:
       with:
         python-version: ${{ inputs.python-version }}
 
-    - name: Install assay
+    - name: Install trueset
       shell: bash
       run: pip install "${{ github.action_path }}[sql]"
 
     - name: Run checks
       shell: bash
       run: |
-        assay run \
+        trueset run \
           --data "${{ inputs.data }}" \
           --checks "${{ inputs.checks }}" \
           ${{ inputs.json == 'true' && '--json' || '' }}

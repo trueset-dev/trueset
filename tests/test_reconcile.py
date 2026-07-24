@@ -3,9 +3,9 @@
 import pandas as pd
 import pytest
 
-from assay import PandasBackend, Suite
-from assay.reconcile import ReferentialIntegrity, RowCountParity, ValueParity
-from assay.result import Status
+from trueset import PandasBackend, Suite
+from trueset.reconcile import ReferentialIntegrity, RowCountParity, ValueParity
+from trueset.result import Status
 
 
 @pytest.fixture

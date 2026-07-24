@@ -14,6 +14,6 @@ labels: bug
 ```
 
 **Environment**
-- assay version:
+- trueset version:
 - backend (pandas / duckdb):
 - Python version:

@@ -4,13 +4,13 @@ Status: design, verified mechanism. Target: incremental, non-breaking.
 
 ## Positioning (read this first)
 
-assay does NOT become a governance *platform*. Catalogs, discovery/search UIs,
+trueset does NOT become a governance *platform*. Catalogs, discovery/search UIs,
 column-level lineage graphs, and access control / IAM are out of scope -- that
 is DataHub / OpenMetadata / Collibra territory, a different product and an
 enormous, well-served scope.
 
-assay owns the half of governance those tools are weak on: **enforcement and
-evidence.** Catalogs *document* what should be true (passive). assay *enforces*
+trueset owns the half of governance those tools are weak on: **enforcement and
+evidence.** Catalogs *document* what should be true (passive). trueset *enforces*
 policies and *proves* compliance happened (active, auditable). Governance here
 is a metadata + reframing layer on top of the existing quality/reconciliation
 core -- not a pivot.
@@ -95,7 +95,7 @@ Once results carry meta, governance reporting is just filtering:
 - "Coverage by owner" -> group results by `meta.owner`.
 - "GDPR posture" -> results where `"gdpr" in meta.regulation`.
 
-Add `assay report --checks ... --data ... --by sensitivity|owner|regulation` and
+Add `trueset report --checks ... --data ... --by sensitivity|owner|regulation` and
 a JSON export. No new engine work -- it reads the results you already produce.
 
 ## 4. Classification (extends the profiler)
@@ -109,7 +109,7 @@ inference to suggest a `sensitivity` tag:
   drafts `owner`/`regulation` suggestions -- but output is reviewed and committed
   like any other check. AI classifies; humans and deterministic code decide.
 
-`assay suggest` gains classification output; suggested suites come pre-tagged for
+`trueset suggest` gains classification output; suggested suites come pre-tagged for
 review. Never auto-apply a sensitivity tag without human sign-off.
 
 ## 5. Data contracts
@@ -141,12 +141,12 @@ non-AI-judged (already enforced).
 ## 7. Catalog composition (NOT catalog building)
 
 Integrate with catalogs rather than replacing them:
-- Push OUT: assay's classifications and pass/fail evidence into DataHub /
+- Push OUT: trueset's classifications and pass/fail evidence into DataHub /
   OpenMetadata (they hold the catalog + lineage).
 - Pull IN: ownership and lineage from the catalog to enrich reports and route
   failures to the right owner.
 
-This keeps assay focused and makes it a good ecosystem citizen instead of a
+This keeps trueset focused and makes it a good ecosystem citizen instead of a
 challenger to entrenched catalogs.
 
 ## 8. How this maps onto the existing roadmap (not a detour)
@@ -166,6 +166,6 @@ around the core, delivered mostly as metadata + reframing.
 
 Add `governance.py` (`GovernanceMeta`, `split_meta`), thread meta through
 `Check`, `build_check`, `CheckResult`, and `SuiteResult.to_dict()`, and add
-`assay report --by {sensitivity|owner|regulation}`. Purely additive; all 25
+`trueset report --by {sensitivity|owner|regulation}`. Purely additive; all 25
 existing tests must stay green. Add tests: a check with governance fields builds
 correctly, meta appears on the result, and the report groups/filters correctly.

@@ -2,7 +2,7 @@
 
 from click.testing import CliRunner
 
-from assay.cli import cli
+from trueset.cli import cli
 
 
 def _write(tmp_path, name, text):

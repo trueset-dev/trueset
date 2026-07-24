@@ -1,6 +1,6 @@
-"""assay -- write a data-quality check once, run it anywhere.
+"""trueset -- write a data-quality check once, run it anywhere.
 
-Placeholder name; trivially renameable. The public API is intentionally small.
+The public API is intentionally small.
 """
 
 from __future__ import annotations

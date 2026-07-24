@@ -3,9 +3,9 @@
 import pandas as pd
 import pytest
 
-from assay import PandasBackend, Suite, SuiteLoadError
-from assay.reconcile import ValueParity
-from assay.result import Status
+from trueset import PandasBackend, Suite, SuiteLoadError
+from trueset.reconcile import ValueParity
+from trueset.result import Status
 
 # --- value_parity duplicate-key detection ---------------------------------- #
 

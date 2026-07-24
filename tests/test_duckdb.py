@@ -7,8 +7,8 @@ import duckdb
 import pandas as pd
 import pytest
 
-from assay import PandasBackend, Suite
-from assay.backends.duckdb_backend import DuckDBBackend
+from trueset import PandasBackend, Suite
+from trueset.backends.duckdb_backend import DuckDBBackend
 
 EX = Path(__file__).resolve().parents[1] / "examples"
 
@@ -54,7 +54,7 @@ def test_reconciliation_suite_matches_across_engines(con):
 
 
 def test_duckdb_pushes_down_referential_integrity(con):
-    from assay.reconcile import ReferentialIntegrity
+    from trueset.reconcile import ReferentialIntegrity
 
     r = ReferentialIntegrity(
         column="order_id", reference="source", ref_column="id"

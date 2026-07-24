@@ -1,15 +1,13 @@
-# assay
+# trueset
 
-[![CI](https://github.com/YOUR_ORG/assay/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_ORG/assay/actions/workflows/ci.yml)
-
-> Working name — trivially renameable. Candidates: assay, touchstone, litmus, aegis.
+[![CI](https://github.com/YOUR_ORG/trueset/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_ORG/trueset/actions/workflows/ci.yml)
 
 **Write a data-quality check once, run it anywhere** — pandas today, PySpark and
 your warehouse next. One declarative check language, one Python API, one CLI.
 
 Data quality tools today force a trade-off: `dbt` tests are SQL-only, Great
 Expectations is powerful but heavy, and each engine (pandas / Spark / SQL) tends
-to want its own syntax. `assay` bets on a single small **Backend protocol** — a
+to want its own syntax. `trueset` bets on a single small **Backend protocol** — a
 check is written once and runs unchanged on any engine that implements the
 protocol. Adding Spark or Snowflake support means writing *one class*, not
 re-authoring a single check.
@@ -18,11 +16,11 @@ re-authoring a single check.
 
 ```bash
 # From source (PyPI release coming — the name is being finalized):
-git clone https://github.com/YOUR_ORG/assay && cd assay
+git clone https://github.com/YOUR_ORG/trueset && cd trueset
 pip install -e ".[sql]"          # [sql] adds the DuckDB backend; omit for pandas-only
 
-assay run --data examples/orders.csv --checks examples/checks.yml
-assay list-checks
+trueset run --data examples/orders.csv --checks examples/checks.yml
+trueset list-checks
 ```
 
 Declarative checks (`checks.yml`):
@@ -50,7 +48,7 @@ Or the Python API:
 
 ```python
 import pandas as pd
-from assay import Suite, validate_dataframe
+from trueset import Suite, validate_dataframe
 
 df = pd.read_csv("orders.csv")
 result = validate_dataframe(df, "checks.yml")
@@ -64,7 +62,7 @@ straight into CI, dbt, or Airflow.
 
 ## Gate your CI in three lines
 
-assay ships a GitHub Action, so a data-quality check becomes a required status
+trueset ships a GitHub Action, so a data-quality check becomes a required status
 check on every pull request:
 
 ```yaml
@@ -72,11 +70,11 @@ check on every pull request:
 name: data-quality
 on: [pull_request]
 jobs:
-  assay:
+  trueset:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: YOUR_ORG/assay@v0
+      - uses: YOUR_ORG/trueset@v0
         with:
           data: data/orders.csv
           checks: quality/orders.yml
@@ -90,10 +88,10 @@ a check to surface a problem without blocking the merge.
 Draft a check suite instead of writing one by hand:
 
 ```bash
-assay profile  --data orders.csv                 # stats + inferred semantic types
-assay suggest  --data orders.csv                 # deterministic draft suite (no AI)
-assay suggest  --data orders.csv --ai --out checks.yml           # AI copilot
-assay suggest  --data orders.csv --describe "amount can't be negative; \
+trueset profile  --data orders.csv                 # stats + inferred semantic types
+trueset suggest  --data orders.csv                 # deterministic draft suite (no AI)
+trueset suggest  --data orders.csv --ai --out checks.yml           # AI copilot
+trueset suggest  --data orders.csv --describe "amount can't be negative; \
     status is one of pending/shipped/delivered/cancelled"        # English -> checks
 ```
 
@@ -106,8 +104,8 @@ deterministic and auditable. The model is injected as a plain callable
 (`Completer`), so it's provider-agnostic and fully testable without a key.
 
 ```python
-from assay import profile_dataframe, suggest_from_profile
-from assay.copilot import anthropic_completer, checks_from_profile
+from trueset import profile_dataframe, suggest_from_profile
+from trueset.copilot import anthropic_completer, checks_from_profile
 
 prof = profile_dataframe(df)
 draft = suggest_from_profile(prof)                      # deterministic
@@ -149,7 +147,7 @@ the `Backend` protocol, a reconciliation check just holds a second backend --
 which can be a totally different engine.
 
 ```bash
-assay reconcile \
+trueset reconcile \
   --data   warehouse_orders.csv \
   --checks reconcile.yml \
   --ref    source=source_orders.csv
@@ -198,7 +196,7 @@ YAML / Python API
      [built]          [next]             [next]
 ```
 
-The `Backend` protocol (`src/assay/backends/base.py`) is deliberately tiny:
+The `Backend` protocol (`src/trueset/backends/base.py`) is deliberately tiny:
 `row_count`, `null_count`, `distinct_count`, `count_out_of_range`, etc. A SQL
 backend implements each as a pushed-down `SELECT count(*) ... WHERE ...` so data
 never leaves the warehouse.

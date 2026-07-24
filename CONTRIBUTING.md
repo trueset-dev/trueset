@@ -1,13 +1,13 @@
 # Contributing
 
-Thanks for helping build assay. This project is small on purpose -- the core
+Thanks for helping build trueset. This project is small on purpose -- the core
 `Backend` protocol is the moat and should stay tiny.
 
 ## Setup
 
 ```bash
 git clone <your-fork-url>
-cd assay
+cd trueset
 pip install -e ".[dev,sql]"
 pytest -q
 ```

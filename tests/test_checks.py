@@ -1,8 +1,8 @@
 import pandas as pd
 import pytest
 
-from assay import PandasBackend, Suite, validate_dataframe
-from assay.checks import (
+from trueset import PandasBackend, Suite, validate_dataframe
+from trueset.checks import (
     ColumnsExist,
     InRange,
     InSet,
@@ -12,7 +12,7 @@ from assay.checks import (
     RowCount,
     Unique,
 )
-from assay.result import Severity, Status
+from trueset.result import Severity, Status
 
 
 @pytest.fixture
