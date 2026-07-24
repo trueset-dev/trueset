@@ -61,3 +61,12 @@ class Backend(Protocol):
         Used by freshness monitoring: the newest timestamp in a column.
         """
         ...
+
+    def aggregate(self, func: str, column: str | None = None) -> float | None:
+        """A numeric aggregate over `column`: one of sum/avg/min/max/count.
+
+        `count` with no column is the row count; with a column it counts
+        non-null values. The others operate on non-null numeric values and
+        return None when there are none. Used by the `metric` check.
+        """
+        ...

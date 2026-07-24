@@ -105,6 +105,19 @@ class DuckDBBackend:
             f"WHERE {_q(column)} IS NOT NULL"
         )
 
+    def aggregate(self, func: str, column: str | None = None) -> float | None:
+        if func == "count":
+            if column is None:
+                return float(self.row_count())
+            return float(self._scalar(
+                f"SELECT count(*) FROM {_q(self.table)} WHERE {_q(column)} IS NOT NULL"
+            ))
+        sqlfn = {"sum": "sum", "avg": "avg", "min": "min", "max": "max"}[func]
+        val = self._scalar(
+            f"SELECT {sqlfn}(TRY_CAST({_q(column)} AS DOUBLE)) FROM {_q(self.table)}"
+        )
+        return None if val is None else float(val)
+
     # -- reconciliation primitives ------------------------------------------- #
 
     def distinct_values(self, column: str) -> set:

@@ -245,6 +245,86 @@ class NoDuplicateRows(Check):
         )
 
 
+_AGGS = ("sum", "avg", "min", "max", "count")
+
+
+class Metric(Check):
+    """Assert a numeric aggregate over a column meets an expectation.
+
+    Validates a metric or report figure: `agg` (sum/avg/min/max/count) either
+    `equals` a target within an absolute `tolerance`, or falls within [`min`,
+    `max`]. Runs as a pushed-down aggregate on any backend.
+
+        - type: metric        # total revenue is ~1_000_000 (+/- 1000)
+          column: amount
+          agg: sum
+          equals: 1000000
+          tolerance: 1000
+
+        - type: metric        # average order value between 10 and 100
+          column: amount
+          agg: avg
+          min: 10
+          max: 100
+    """
+
+    type = "metric"
+
+    def __init__(
+        self,
+        agg: str,
+        column: str | None = None,
+        equals: float | None = None,
+        tolerance: float = 0.0,
+        min: float | None = None,
+        max: float | None = None,
+        **kw,
+    ):
+        super().__init__(**kw)
+        if agg not in _AGGS:
+            raise ValueError(f"agg must be one of {_AGGS}, got '{agg}'")
+        if agg != "count" and column is None:
+            raise ValueError(f"agg '{agg}' requires a column")
+        if equals is None and min is None and max is None:
+            raise ValueError("metric needs 'equals' (with optional 'tolerance') or 'min'/'max'")
+        self.agg = agg
+        self.column = column
+        self.equals = equals
+        self.tolerance = tolerance
+        self.min = min
+        self.max = max
+
+    def evaluate(self, backend: Backend) -> CheckResult:
+        if self.column is not None and (err := self._fail_if_missing(backend, self.column)):
+            return err
+        value = backend.aggregate(self.agg, self.column)
+        label = f"{self.agg}({self.column or '*'})"
+        if value is None:
+            return CheckResult(
+                check=self.type, column=self.column, status=Status.FAIL,
+                severity=self.severity, observed=None, meta=self.meta,
+                message=f"{label} has no value to compare",
+            )
+        if self.equals is not None:
+            ok = abs(value - self.equals) <= self.tolerance
+            expectation = f"== {self.equals} (+/- {self.tolerance})"
+        else:
+            ok = (self.min is None or value >= self.min) and (
+                self.max is None or value <= self.max
+            )
+            expectation = f"in [{self.min}, {self.max}]"
+        return CheckResult(
+            check=self.type,
+            column=self.column,
+            status=Status.PASS if ok else Status.FAIL,
+            severity=self.severity,
+            observed={"metric": label, "value": value, "expected": expectation},
+            failing_rows=0 if ok else 1,
+            message="" if ok else f"{label} = {value}, expected {expectation}",
+            meta=self.meta,
+        )
+
+
 def _parse_timestamp(value: Any) -> datetime:
     """Coerce a backend's max-value (Timestamp, date, or ISO string) to datetime."""
     if isinstance(value, datetime):  # pandas Timestamp is a datetime subclass
@@ -340,6 +420,7 @@ for _c in (
     RowCount,
     NoDuplicateRows,
     Freshness,
+    Metric,
 ):
     register(_c)
 

@@ -136,6 +136,21 @@ class SQLAlchemyBackend:
             select(func.max(col)).select_from(self.table).where(col.is_not(None))
         )
 
+    def aggregate(self, agg: str, column: str | None = None) -> float | None:
+        if agg == "count":
+            if column is None:
+                return float(self.row_count())
+            col = self._col(column)
+            return float(self._scalar(
+                select(func.count()).select_from(self.table).where(col.is_not(None))
+            ))
+        col = self._col(column)
+        fn = {"sum": func.sum, "avg": func.avg, "min": func.min, "max": func.max}[agg]
+        val = self._scalar(
+            select(fn(cast(col, Float))).select_from(self.table).where(col.is_not(None))
+        )
+        return None if val is None else float(val)
+
     # -- reconciliation primitives ------------------------------------------- #
     # These read distinct keys / a key->row map from the reference so a check
     # can compare two systems. They materialize the projected columns (not the

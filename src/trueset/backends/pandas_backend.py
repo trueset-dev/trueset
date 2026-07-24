@@ -65,6 +65,17 @@ class PandasBackend:
             return None
         return s.max()
 
+    def aggregate(self, func: str, column: str | None = None) -> float | None:
+        if func == "count":
+            if column is None:
+                return float(len(self.df))
+            return float(self.df[column].notna().sum())
+        s = pd.to_numeric(self.df[column], errors="coerce").dropna()
+        if s.empty:
+            return None
+        op = {"sum": "sum", "avg": "mean", "min": "min", "max": "max"}[func]
+        return float(getattr(s, op)())
+
     # -- reconciliation primitives (cross-system) ---------------------------- #
     # In a warehouse backend these become pushed-down SQL / sampled checksums
     # (the data-diff approach) so we never pull full tables locally. For the

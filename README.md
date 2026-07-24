@@ -306,8 +306,8 @@ against the source, governance, and monitoring — on top of your existing tests
 ## Built-in checks
 
 `columns_exist`, `not_null`, `unique`, `in_set`, `in_range`, `matches_regex`,
-`row_count`, `no_duplicate_rows`, `freshness`, plus the reconciliation checks
-`row_count_parity`, `referential_integrity`, `value_parity`. Each has a
+`row_count`, `no_duplicate_rows`, `freshness`, `metric`, plus the reconciliation
+checks `row_count_parity`, `referential_integrity`, `value_parity`. Each has a
 `severity` of `error` (default) or `warn`.
 
 ## Architecture

@@ -7,6 +7,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **`metric` check** — validate an aggregate (sum/avg/min/max/count) `equals` a
+  target within `tolerance`, or falls in a `min`/`max` range. For metrics/report
+  validation ("total revenue ≈ X", "avg order value in [10, 100]"). Runs as a
+  pushed-down aggregate via a new `aggregate` protocol primitive, proven
+  identical across pandas/DuckDB/SQLAlchemy.
 - **Generalized anomaly detection.** `trueset monitor` can now trend *any* metric,
   not just row volume: `--metric rows|failing_rows|total_rows` with `--check`/
   `--column` to watch a specific check's failing-row trend. Two deterministic
