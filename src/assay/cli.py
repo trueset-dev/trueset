@@ -22,21 +22,35 @@ from rich.table import Table
 from .backends.pandas_backend import PandasBackend
 from .checks import available_checks
 from .result import Status
-from .suite import Suite
+from .suite import Suite, SuiteLoadError
 
 console = Console()
 
 
 def _load_data(path: str) -> pd.DataFrame:
     p = Path(path)
-    if p.suffix.lower() in {".csv", ".tsv"}:
-        sep = "\t" if p.suffix.lower() == ".tsv" else ","
-        return pd.read_csv(p, sep=sep)
-    if p.suffix.lower() in {".parquet", ".pq"}:
-        return pd.read_parquet(p)
-    if p.suffix.lower() in {".json",}:
-        return pd.read_json(p)
-    raise click.ClickException(f"unsupported data format: {p.suffix}")
+    if not p.exists():
+        raise click.ClickException(f"data file not found: {p}")
+    suffix = p.suffix.lower()
+    try:
+        if suffix in {".csv", ".tsv"}:
+            return pd.read_csv(p, sep="\t" if suffix == ".tsv" else ",")
+        if suffix in {".parquet", ".pq"}:
+            return pd.read_parquet(p)
+        if suffix == ".json":
+            return pd.read_json(p)
+    except Exception as exc:  # malformed file, unreadable, missing engine, ...
+        raise click.ClickException(f"could not read {p}: {exc}") from exc
+    raise click.ClickException(
+        f"unsupported data format '{p.suffix}' (expected .csv/.tsv/.parquet/.json)"
+    )
+
+
+def _load_suite(path: str) -> Suite:
+    try:
+        return Suite.from_yaml(path)
+    except SuiteLoadError as exc:
+        raise click.ClickException(str(exc)) from exc
 
 
 def _render(result) -> None:
@@ -81,7 +95,7 @@ def cli() -> None:
 def run(data: str, checks_path: str, as_json: bool) -> None:
     """Run a check suite against a dataset."""
     df = _load_data(data)
-    suite = Suite.from_yaml(checks_path)
+    suite = _load_suite(checks_path)
     result = suite.run(PandasBackend(df))
 
     if as_json:
@@ -113,7 +127,7 @@ def reconcile(data: str, checks_path: str, refs: tuple[str, ...], as_json: bool)
         name, path = spec.split("=", 1)
         references[name] = PandasBackend(_load_data(path))
 
-    suite = Suite.from_yaml(checks_path)
+    suite = _load_suite(checks_path)
     result = suite.run(primary, references=references)
 
     if as_json:

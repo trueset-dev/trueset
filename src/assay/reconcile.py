@@ -125,6 +125,22 @@ class ValueParity(ReconciliationCheck):
         self.ref_columns = list(ref_columns) if ref_columns else list(columns)
 
     def evaluate(self, backend: Backend, ref_backend: Backend) -> CheckResult:
+        for be, col, side in (
+            (backend, self.key, "primary"),
+            (ref_backend, self.ref_key, "reference"),
+        ):
+            if col not in be.columns():
+                return CheckResult(
+                    self.type, Status.ERROR, self.severity, column=col,
+                    message=f"key column '{col}' missing in {side}",
+                )
+
+        # A key that repeats collapses in the join map (one row silently wins).
+        # For a reconciliation contract that ambiguity IS a defect, so we detect
+        # it up front with existing primitives rather than hide it.
+        dup_primary = _duplicate_keys(backend, self.key)
+        dup_reference = _duplicate_keys(ref_backend, self.ref_key)
+
         a = backend.key_map(self.key, self.columns)
         b = ref_backend.key_map(self.ref_key, self.ref_columns)
 
@@ -133,14 +149,29 @@ class ValueParity(ReconciliationCheck):
         mismatched = sum(1 for k in common if a[k] != b[k])
         only_primary = len(a_keys - b_keys)
         only_reference = len(b_keys - a_keys)
-        failing = mismatched + only_primary + only_reference
+        failing = (
+            mismatched + only_primary + only_reference + dup_primary + dup_reference
+        )
 
         observed = {
             "mismatched_values": mismatched,
             "only_in_primary": only_primary,
             "only_in_reference": only_reference,
+            "duplicate_keys_primary": dup_primary,
+            "duplicate_keys_reference": dup_reference,
             "compared_keys": len(common),
         }
+        parts = []
+        if mismatched:
+            parts.append(f"{mismatched} mismatch(es)")
+        if only_primary:
+            parts.append(f"{only_primary} only-in-primary")
+        if only_reference:
+            parts.append(f"{only_reference} only-in-reference")
+        if dup_primary:
+            parts.append(f"{dup_primary} duplicate key(s) in primary")
+        if dup_reference:
+            parts.append(f"{dup_reference} duplicate key(s) in reference")
         return CheckResult(
             check=self.type,
             status=Status.PASS if failing == 0 else Status.FAIL,
@@ -149,9 +180,15 @@ class ValueParity(ReconciliationCheck):
             observed=observed,
             total_rows=len(a),
             failing_rows=failing,
-            message="" if failing == 0 else (
-                f"{mismatched} mismatch(es), "
-                f"{only_primary} only-in-primary, "
-                f"{only_reference} only-in-reference"
-            ),
+            message="" if failing == 0 else ", ".join(parts),
         )
+
+
+def _duplicate_keys(backend: Backend, key: str) -> int:
+    """How many non-null key occurrences collapse because the key repeats.
+
+    Equal to (non-null rows) - (distinct non-null values). Uses only protocol
+    primitives, so it works on every backend without new methods.
+    """
+    non_null = backend.row_count() - backend.null_count(key)
+    return max(0, non_null - backend.distinct_count(key))

@@ -1,0 +1,41 @@
+name: "assay data quality"
+description: "Run an assay check suite against a dataset and fail the job on error-severity failures."
+branding:
+  icon: "check-circle"
+  color: "purple"
+
+inputs:
+  data:
+    description: "Path to the dataset (CSV/TSV/Parquet/JSON)."
+    required: true
+  checks:
+    description: "Path to the checks YAML file."
+    required: true
+  json:
+    description: "Emit machine-readable JSON instead of a table."
+    required: false
+    default: "false"
+  python-version:
+    description: "Python version to run assay with."
+    required: false
+    default: "3.12"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install assay
+      shell: bash
+      run: pip install "${{ github.action_path }}[sql]"
+
+    - name: Run checks
+      shell: bash
+      run: |
+        assay run \
+          --data "${{ inputs.data }}" \
+          --checks "${{ inputs.checks }}" \
+          ${{ inputs.json == 'true' && '--json' || '' }}

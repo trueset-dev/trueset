@@ -8,7 +8,7 @@ from __future__ import annotations
 from .backends.pandas_backend import PandasBackend
 from .checks import Check, available_checks, build_check
 from .result import CheckResult, Severity, Status, SuiteResult
-from .suite import Suite
+from .suite import Suite, SuiteLoadError
 
 try:  # optional -- only if the [sql] extra is installed
     from .backends.duckdb_backend import DuckDBBackend
@@ -26,6 +26,7 @@ __version__ = "0.0.1"
 
 __all__ = [
     "Suite",
+    "SuiteLoadError",
     "Check",
     "CheckResult",
     "SuiteResult",

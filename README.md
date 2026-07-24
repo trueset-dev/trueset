@@ -17,7 +17,9 @@ re-authoring a single check.
 ## Quickstart
 
 ```bash
-pip install -e ".[dev]"          # from source, for now
+# From source (PyPI release coming — the name is being finalized):
+git clone https://github.com/YOUR_ORG/assay && cd assay
+pip install -e ".[sql]"          # [sql] adds the DuckDB backend; omit for pandas-only
 
 assay run --data examples/orders.csv --checks examples/checks.yml
 assay list-checks
@@ -59,6 +61,29 @@ print(result.to_dict())                 # JSON-ready, ship to a warehouse/dashbo
 
 The CLI exits non-zero when any `error`-severity check fails, so it drops
 straight into CI, dbt, or Airflow.
+
+## Gate your CI in three lines
+
+assay ships a GitHub Action, so a data-quality check becomes a required status
+check on every pull request:
+
+```yaml
+# .github/workflows/data-quality.yml
+name: data-quality
+on: [pull_request]
+jobs:
+  assay:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: YOUR_ORG/assay@v0
+        with:
+          data: data/orders.csv
+          checks: quality/orders.yml
+```
+
+The job fails the moment an `error`-severity check fails. Use `severity: warn` on
+a check to surface a problem without blocking the merge.
 
 ## Profiling & AI-assisted authoring
 
