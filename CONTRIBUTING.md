@@ -31,11 +31,5 @@ pytest -q
 
 ## License
 
-This project is Apache-2.0. The repo ships a stub `LICENSE`; before publishing,
-replace it with the official text:
-
-```bash
-curl -sL https://www.apache.org/licenses/LICENSE-2.0.txt -o LICENSE
-```
-
-By contributing you agree your contributions are licensed under Apache-2.0.
+This project is Apache-2.0. By contributing you agree your contributions are
+licensed under Apache-2.0.
