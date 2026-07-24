@@ -1,6 +1,6 @@
 # trueset
 
-[![CI](https://github.com/YOUR_ORG/trueset/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_ORG/trueset/actions/workflows/ci.yml)
+[![CI](https://github.com/trueset-dev/trueset/actions/workflows/ci.yml/badge.svg)](https://github.com/trueset-dev/trueset/actions/workflows/ci.yml)
 
 **Write a data-quality check once, run it anywhere** — pandas today, PySpark and
 your warehouse next. One declarative check language, one Python API, one CLI.
@@ -16,7 +16,7 @@ re-authoring a single check.
 
 ```bash
 # From source (PyPI release coming — the name is being finalized):
-git clone https://github.com/YOUR_ORG/trueset && cd trueset
+git clone https://github.com/trueset-dev/trueset && cd trueset
 pip install -e ".[sql]"          # [sql] adds the DuckDB backend; omit for pandas-only
 
 trueset run --data examples/orders.csv --checks examples/checks.yml
@@ -74,7 +74,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: YOUR_ORG/trueset@v0
+      - uses: trueset-dev/trueset@v0
         with:
           data: data/orders.csv
           checks: quality/orders.yml

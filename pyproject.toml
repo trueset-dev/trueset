@@ -37,10 +37,10 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/YOUR_ORG/trueset"
-Repository = "https://github.com/YOUR_ORG/trueset"
-Issues = "https://github.com/YOUR_ORG/trueset/issues"
-Changelog = "https://github.com/YOUR_ORG/trueset/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/trueset-dev/trueset"
+Repository = "https://github.com/trueset-dev/trueset"
+Issues = "https://github.com/trueset-dev/trueset/issues"
+Changelog = "https://github.com/trueset-dev/trueset/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 spark = ["pyspark>=3.4"]

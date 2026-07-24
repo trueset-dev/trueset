@@ -16,7 +16,7 @@ PyPI. Steps only you can do are marked **(you)**; the rest is already wired.
 Once the org name is set, the remote is added for you (or run it yourself):
 
 ```bash
-git remote add origin git@github.com:<ORG>/trueset.git
+git remote add origin git@github.com:trueset-dev/trueset.git
 git push -u origin main
 ```
 
@@ -31,7 +31,7 @@ long-lived API token to leak.
 2. Go to https://pypi.org/manage/account/publishing/ and add a **pending
    publisher** with exactly:
    - **PyPI Project Name:** `trueset`
-   - **Owner:** `<ORG>` (your GitHub org)
+   - **Owner:** `trueset-dev` (your GitHub org)
    - **Repository name:** `trueset`
    - **Workflow name:** `release.yml`
    - **Environment name:** `pypi`
