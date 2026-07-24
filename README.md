@@ -241,8 +241,21 @@ trueset report --data orders.csv --checks governed.yml --by sensitivity
 
 Group `--by owner` to route failures to a team, or `--by regulation` for a GDPR
 / SOX posture. `--json` emits the same as auditable evidence for a compliance
-trail. The AI copilot may *suggest* classifications, but (like every check) they
-are reviewed and committed by a human — never auto-applied.
+trail.
+
+**Classification is suggested, never imposed.** `trueset profile` infers a
+`sensitivity` for high-precision patterns (email, phone, SSN, credit card via
+Luhn, IBAN), and `trueset suggest` pre-tags the drafted checks:
+
+```
+column   inferred   sensitivity
+email    email      pii
+ssn      ssn        pii
+card     credit_card pci
+```
+
+Both the deterministic profiler and the AI copilot only *suggest* tags — like
+every check, they are reviewed and committed by a human, never auto-applied.
 
 ## Monitoring: freshness & volume
 

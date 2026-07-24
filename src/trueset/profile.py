@@ -28,8 +28,47 @@ UUID_RE = re.compile(
     r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
 )
 URL_RE = re.compile(r"^https?://", re.IGNORECASE)
+SSN_RE = re.compile(r"^\d{3}-\d{2}-\d{4}$")  # US SSN
+IBAN_RE = re.compile(r"^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$")
+_PHONE_CHARS_RE = re.compile(r"^\+?[\d\s().-]+$")
 
 SMALL_CARDINALITY = 20  # object columns at/below this look categorical
+
+#: which detected semantic type implies which data-classification level.
+#: Deterministic, high-precision only -- these become *suggested* tags a human
+#: reviews (never auto-applied). pii = personal, pci = payment/financial.
+SENSITIVITY_BY_SEMANTIC = {
+    "email": "pii",
+    "phone": "pii",
+    "ssn": "pii",
+    "credit_card": "pci",
+    "iban": "pci",
+}
+
+
+def _is_phone(value: str) -> bool:
+    if not _PHONE_CHARS_RE.match(value):
+        return False
+    digits = re.sub(r"\D", "", value)
+    return 10 <= len(digits) <= 15
+
+
+def _luhn_ok(digits: str) -> bool:
+    total, alt = 0, False
+    for ch in reversed(digits):
+        d = ord(ch) - 48
+        if alt:
+            d *= 2
+            if d > 9:
+                d -= 9
+        total += d
+        alt = not alt
+    return total % 10 == 0
+
+
+def _is_credit_card(value: str) -> bool:
+    digits = re.sub(r"[\s-]", "", value)
+    return digits.isdigit() and 13 <= len(digits) <= 19 and _luhn_ok(digits)
 
 
 def _jsonable(v: Any) -> Any:
@@ -56,6 +95,9 @@ class ColumnProfile:
     numeric_max: float | None = None
     categories: list[Any] | None = None
     samples: list[Any] = field(default_factory=list)
+    #: SUGGESTED classification (pii/pci) from the semantic type; None if unknown.
+    #: A suggestion for human review -- trueset never auto-applies a tag.
+    sensitivity: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -75,6 +117,13 @@ def _infer_semantic(s: pd.Series) -> str:
     if non_null.empty:
         return "empty"
     if pd.api.types.is_numeric_dtype(s):
+        # A card number stored as a bare integer still deserves the pci tag, but
+        # only if the WHOLE column looks like one (length + Luhn) -- a random ID
+        # column passing Luhn everywhere is vanishingly unlikely.
+        if pd.api.types.is_integer_dtype(s):
+            ints = non_null.head(200)
+            if (ints.map(lambda v: _is_credit_card(str(int(v)))).mean()) > 0.99:
+                return "credit_card"
         return "numeric"
     if pd.api.types.is_datetime64_any_dtype(s):
         return "datetime"
@@ -84,12 +133,23 @@ def _infer_semantic(s: pd.Series) -> str:
     def frac_match(rx: re.Pattern) -> float:
         return sample.map(lambda x: bool(rx.match(x))).mean()
 
+    def frac_pred(pred) -> float:
+        return sample.map(pred).mean()
+
     if frac_match(EMAIL_RE) > 0.8:
         return "email"
     if frac_match(UUID_RE) > 0.8:
         return "uuid"
     if frac_match(URL_RE) > 0.8:
         return "url"
+    if frac_match(SSN_RE) > 0.8:
+        return "ssn"
+    if frac_match(IBAN_RE) > 0.8:
+        return "iban"
+    if frac_pred(_is_credit_card) > 0.8:
+        return "credit_card"
+    if frac_pred(_is_phone) > 0.8:
+        return "phone"
 
     # try datetime parse on strings
     try:
@@ -136,6 +196,7 @@ def profile_dataframe(df: pd.DataFrame) -> DatasetProfile:
                 numeric_max=nmax,
                 categories=categories,
                 samples=[_jsonable(v) for v in s.dropna().head(3).tolist()],
+                sensitivity=SENSITIVITY_BY_SEMANTIC.get(inferred),
             )
         )
     return DatasetProfile(rows=rows, columns=cols)
@@ -150,18 +211,17 @@ def suggest_from_profile(
         {"type": "row_count", "min": 1},
     ]
     for c in profile.columns:
+        col_checks: list[dict[str, Any]] = []
         if c.null_rate == 0 and c.inferred != "empty":
-            checks.append({"type": "not_null", "column": c.name})
+            col_checks.append({"type": "not_null", "column": c.name})
         if c.is_unique:
-            checks.append({"type": "unique", "column": c.name})
+            col_checks.append({"type": "unique", "column": c.name})
         if c.inferred == "categorical" and c.categories:
-            checks.append(
-                {"type": "in_set", "column": c.name, "values": c.categories}
-            )
+            col_checks.append({"type": "in_set", "column": c.name, "values": c.categories})
         if c.inferred == "numeric" and c.numeric_min is not None and c.numeric_min >= 0:
-            checks.append({"type": "in_range", "column": c.name, "min": 0})
+            col_checks.append({"type": "in_range", "column": c.name, "min": 0})
         if c.inferred == "email":
-            checks.append(
+            col_checks.append(
                 {
                     "type": "matches_regex",
                     "column": c.name,
@@ -169,4 +229,11 @@ def suggest_from_profile(
                     "severity": "warn",
                 }
             )
+
+        # Pre-tag every check on a classified column with the SUGGESTED
+        # sensitivity, for a human to review and commit (never auto-applied).
+        if c.sensitivity:
+            for chk in col_checks:
+                chk["sensitivity"] = c.sensitivity
+        checks.extend(col_checks)
     return {"suite": suite_name, "checks": checks}

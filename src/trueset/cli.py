@@ -356,11 +356,12 @@ def profile(data: str) -> None:
     df = _load_data(data)
     prof = profile_dataframe(df)
     table = Table(title=f"profile :: {Path(data).name} ({prof.rows} rows)")
-    for col in ("column", "dtype", "inferred", "nulls", "distinct", "unique"):
+    for col in ("column", "dtype", "inferred", "sensitivity", "nulls", "distinct", "unique"):
         table.add_column(col)
     for c in prof.columns:
+        sens = f"[magenta]{c.sensitivity}[/]" if c.sensitivity else "-"
         table.add_row(
-            c.name, c.dtype, c.inferred, str(c.nulls), str(c.distinct), str(c.is_unique)
+            c.name, c.dtype, c.inferred, sens, str(c.nulls), str(c.distinct), str(c.is_unique)
         )
     console.print(table)
 

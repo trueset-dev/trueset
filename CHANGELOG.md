@@ -7,6 +7,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **Data classification.** The profiler now infers a suggested `sensitivity`
+  (pii/pci) for high-precision patterns — email, phone, US SSN, credit card
+  (length + Luhn, incl. bare-integer columns), IBAN. `trueset profile` shows a
+  sensitivity column and `trueset suggest` pre-tags the drafted checks. These are
+  *suggestions for human review* — trueset never auto-applies a classification.
 - **Monitoring.** New `freshness` check — the newest value in a timestamp column
   must be within `max_age_hours` of now (catches stale pipelines); runs on every
   backend via a new `max_value` protocol primitive, proven identical across
