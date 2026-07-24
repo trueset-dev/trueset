@@ -8,7 +8,3 @@ build/
 venv/
 .ruff_cache/
 .DS_Store
-
-# local agent / editor config
-.claude/
-CLAUDE.md
