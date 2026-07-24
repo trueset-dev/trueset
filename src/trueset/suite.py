@@ -75,25 +75,25 @@ class Suite:
                 if isinstance(check, ReconciliationCheck):
                     ref = references.get(check.reference)
                     if ref is None:
-                        results.append(
-                            CheckResult(
-                                check=check.type,
-                                status=Status.ERROR,
-                                severity=check.severity,
-                                message=f"reference '{check.reference}' not provided",
-                            )
+                        result = CheckResult(
+                            check=check.type,
+                            status=Status.ERROR,
+                            severity=check.severity,
+                            message=f"reference '{check.reference}' not provided",
                         )
-                        continue
-                    results.append(check.evaluate(backend, ref))
+                    else:
+                        result = check.evaluate(backend, ref)
                 else:
-                    results.append(check.evaluate(backend))
+                    result = check.evaluate(backend)
             except Exception as exc:  # a broken check should not kill the run
-                results.append(
-                    CheckResult(
-                        check=getattr(check, "type", "check"),
-                        status=Status.ERROR,
-                        severity=check.severity,
-                        message=f"check raised: {exc}",
-                    )
+                result = CheckResult(
+                    check=getattr(check, "type", "check"),
+                    status=Status.ERROR,
+                    severity=check.severity,
+                    message=f"check raised: {exc}",
                 )
+            # Guarantee every result carries its check's governance context,
+            # regardless of which code path produced it (evidence must be complete).
+            result.meta = check.meta
+            results.append(result)
         return SuiteResult(name=self.name, dataset=self.dataset, results=results)

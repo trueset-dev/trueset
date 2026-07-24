@@ -11,6 +11,8 @@ from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any
 
+from .governance import GovernanceMeta
+
 
 class Severity(str, Enum):
     """How much a failing check matters.
@@ -39,6 +41,8 @@ class CheckResult:
     total_rows: int | None = None
     failing_rows: int | None = None
     message: str = ""
+    #: governance context copied from the check; empty for ungoverned checks
+    meta: GovernanceMeta = field(default_factory=GovernanceMeta)
 
     @property
     def ok(self) -> bool:
@@ -49,6 +53,12 @@ class CheckResult:
         d = asdict(self)
         d["status"] = self.status.value
         d["severity"] = self.severity.value
+        # Only surface governance in the JSON when it's actually set, so evidence
+        # for regulated users is machine-readable without cluttering plain runs.
+        if self.meta.is_set():
+            d["meta"] = self.meta.to_dict()
+        else:
+            d.pop("meta", None)
         return d
 
 

@@ -12,6 +12,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from .backends.base import Backend
+from .governance import GovernanceMeta, split_meta
 from .result import CheckResult, Severity, Status
 
 
@@ -21,6 +22,8 @@ class Check(ABC):
 
     def __init__(self, severity: Severity | str = Severity.ERROR):
         self.severity = Severity(severity)
+        #: optional governance metadata; set by build_check, empty otherwise
+        self.meta: GovernanceMeta = GovernanceMeta()
 
     @abstractmethod
     def evaluate(self, backend: Backend) -> CheckResult:
@@ -36,6 +39,7 @@ class Check(ABC):
                 status=Status.ERROR,
                 severity=self.severity,
                 message=f"column '{column}' does not exist",
+                meta=self.meta,
             )
         return None
 
@@ -56,6 +60,7 @@ class Check(ABC):
             total_rows=total,
             failing_rows=failing,
             message=message,
+            meta=self.meta,
         )
 
 
@@ -265,7 +270,12 @@ for _c in (
 
 
 def build_check(spec: dict[str, Any]) -> Check:
-    """Turn one YAML mapping into a Check instance."""
+    """Turn one YAML mapping into a Check instance.
+
+    Governance metadata (owner/sensitivity/regulation/tags/description) is split
+    OUT before construction -- otherwise those keys would reach the check's
+    __init__ as unexpected kwargs and crash it -- then attached to the check.
+    """
     spec = dict(spec)
     type_ = spec.pop("type", None)
     if type_ is None:
@@ -273,7 +283,10 @@ def build_check(spec: dict[str, Any]) -> Check:
     if type_ not in _REGISTRY:
         known = ", ".join(sorted(_REGISTRY))
         raise ValueError(f"unknown check type '{type_}'. known types: {known}")
-    return _REGISTRY[type_](**spec)
+    rest, meta = split_meta(spec)
+    check = _REGISTRY[type_](**rest)
+    check.meta = meta
+    return check
 
 
 def available_checks() -> list[str]:

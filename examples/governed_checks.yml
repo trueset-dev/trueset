@@ -1,0 +1,48 @@
+# The same checks as checks.yml, now carrying governance metadata. Governance
+# fields (owner/sensitivity/regulation/tags/description) are OPTIONAL and additive
+# -- they change nothing about how a check runs, they just ride onto the result
+# so `trueset report` can answer policy questions ("are any PII checks failing?").
+suite: orders_quality_governed
+dataset: orders
+
+checks:
+  - type: not_null
+    column: order_id
+    owner: data-platform
+    sensitivity: internal
+    description: "Every order must have an id"
+
+  - type: unique
+    column: order_id
+    owner: data-platform
+    sensitivity: internal
+
+  - type: not_null
+    column: amount
+    owner: finance
+    sensitivity: confidential
+    regulation: [sox]
+
+  - type: in_range
+    column: amount
+    min: 0
+    max: 100000
+    owner: finance
+    sensitivity: confidential
+    regulation: [sox]
+    description: "Order amounts must be non-negative and within sane bounds"
+
+  - type: matches_regex
+    column: email
+    pattern: '[^@\s]+@[^@\s]+\.[^@\s]+'
+    owner: risk-team
+    sensitivity: pii
+    regulation: [gdpr, ccpa]
+    tags: [customer, identity]
+    description: "Customer email must be well-formed PII"
+
+  - type: in_set
+    column: status
+    values: [pending, shipped, delivered, cancelled]
+    owner: data-platform
+    tags: [orders]

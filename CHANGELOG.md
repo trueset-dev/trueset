@@ -7,6 +7,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **Governance layer** (additive, non-breaking). Any check may carry optional
+  `owner` / `sensitivity` / `regulation` / `tags` / `description`. `split_meta`
+  separates these from check kwargs in `build_check`, they ride onto every
+  `CheckResult`, and serialize into JSON evidence when set. New `trueset report
+  --by {sensitivity|owner|regulation}` groups pass/fail by policy dimension and
+  flags failing checks on sensitive (pii/pci/phi/confidential) data. Sensitivity
+  is validated against `public<internal<confidential<pii<pci<phi`.
 - **`SQLAlchemyBackend`** — one class turns any SQLAlchemy-supported database
   (Postgres, MySQL/MariaDB, SQLite, Snowflake, BigQuery, Redshift, …) into a
   first-class engine. Every check is pushed down as `SELECT count(*) … WHERE …`

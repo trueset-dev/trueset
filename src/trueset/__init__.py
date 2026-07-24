@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from .backends.pandas_backend import PandasBackend
 from .checks import Check, available_checks, build_check
+from .governance import GovernanceMeta, split_meta
 from .result import CheckResult, Severity, Status, SuiteResult
 from .suite import Suite, SuiteLoadError
 
@@ -41,6 +42,8 @@ __all__ = [
     "SQLAlchemyBackend",
     "build_check",
     "available_checks",
+    "GovernanceMeta",
+    "split_meta",
     "validate_dataframe",
     "profile_dataframe",
     "suggest_from_profile",

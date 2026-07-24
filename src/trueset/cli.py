@@ -21,6 +21,7 @@ from rich.table import Table
 
 from .backends.pandas_backend import PandasBackend
 from .checks import available_checks
+from .governance import BY_DIMENSIONS, group_results
 from .result import Status
 from .suite import Suite, SuiteLoadError
 
@@ -194,6 +195,88 @@ def reconcile(
 
     _render(result)
     sys.exit(0 if result.passed else 1)
+
+
+@cli.command()
+@click.option("--data", default=None, help="Path to CSV/TSV/Parquet/JSON data.")
+@click.option("--url", default=None, help="SQLAlchemy URL of a database to validate in place.")
+@click.option("--table", default=None, help="Table name to validate (with --url).")
+@click.option("--checks", "checks_path", required=True, help="Path to a checks YAML file.")
+@click.option(
+    "--by",
+    type=click.Choice(BY_DIMENSIONS),
+    default="sensitivity",
+    help="Governance dimension to group by.",
+)
+@click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON evidence.")
+@click.option(
+    "--fail/--no-fail",
+    "fail_on_error",
+    default=True,
+    help="Exit non-zero if any error-severity check fails (default: --fail).",
+)
+def report(
+    data: str | None,
+    url: str | None,
+    table: str | None,
+    checks_path: str,
+    by: str,
+    as_json: bool,
+    fail_on_error: bool,
+) -> None:
+    """Run a suite and report pass/fail grouped by governance metadata.
+
+    Answers policy questions like "are any PII checks failing?" or "what's our
+    GDPR posture?" by reading the deterministic results your checks already
+    produce -- auditable evidence, no new engine work.
+    """
+    backend = _primary_backend(data, url, table)
+    suite = _load_suite(checks_path)
+    result = suite.run(backend)
+    groups = group_results(result.results, by)
+
+    if as_json:
+        payload = {
+            "suite": result.name,
+            "by": by,
+            "passed": result.passed,
+            "groups": [
+                {
+                    "group": g["group"],
+                    "counts": g["counts"],
+                    "passed": g["passed"],
+                    "checks": [r.to_dict() for r in g["results"]],
+                }
+                for g in groups
+            ],
+        }
+        console.print_json(json.dumps(payload))
+        sys.exit(0 if result.passed or not fail_on_error else 1)
+
+    table_out = Table(title=f"governance report :: {result.name}  (by {by})")
+    for col in (by, "checks", "pass", "fail", "error", "status"):
+        table_out.add_column(col)
+    for g in groups:
+        c = g["counts"]
+        n = c["pass"] + c["fail"] + c["error"]
+        verdict = "[green]OK[/]" if g["passed"] else "[red]VIOLATION[/]"
+        table_out.add_row(
+            g["group"], str(n), str(c["pass"]), str(c["fail"]), str(c["error"]), verdict
+        )
+    console.print(table_out)
+
+    # Call out the thing a compliance owner cares about most.
+    sensitive_failures = [
+        r for r in result.results if not r.ok and r.meta.is_sensitive
+    ]
+    if sensitive_failures:
+        console.print(
+            f"[red]⚠ {len(sensitive_failures)} failing check(s) on "
+            f"sensitive (pii/pci/phi/confidential) data.[/]"
+        )
+    verdict = "[green]PASSED[/]" if result.passed else "[red]FAILED[/]"
+    console.print(verdict)
+    sys.exit(0 if result.passed or not fail_on_error else 1)
 
 
 @cli.command()

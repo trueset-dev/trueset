@@ -204,6 +204,46 @@ keys** on either side (an ambiguous join is itself a reconciliation defect).
 Either side can be a file, DuckDB, or any SQLAlchemy warehouse — they need not
 share an engine.
 
+## Governance: enforcement + evidence
+
+trueset isn't a catalog (that's DataHub/Collibra territory). It owns the half
+catalogs are weak on — **enforcing** policy and **proving** compliance happened.
+Governance is optional metadata on a check, nothing more:
+
+```yaml
+- type: matches_regex
+  column: email
+  pattern: '[^@\s]+@[^@\s]+\.[^@\s]+'
+  owner: risk-team              # accountable party
+  sensitivity: pii              # public|internal|confidential|pii|pci|phi
+  regulation: [gdpr, ccpa]      # regime tags
+  description: "Customer email is PII and must be well-formed"
+```
+
+These fields change nothing about how the check runs — they ride onto the result
+as machine-readable, auditable evidence. `trueset report` then answers policy
+questions directly:
+
+```bash
+trueset report --data orders.csv --checks governed.yml --by sensitivity
+```
+
+```
+ governance report :: orders_quality_governed  (by sensitivity)
+┏━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━┳━━━━━━┳━━━━━━━┳━━━━━━━━━━━┓
+┃ sensitivity  ┃ checks ┃ pass ┃ fail ┃ error ┃ status    ┃
+┡━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━╇━━━━━━╇━━━━━━━╇━━━━━━━━━━━┩
+│ pii          │ 1      │ 0    │ 1    │ 0     │ VIOLATION │
+│ confidential │ 2      │ 0    │ 2    │ 0     │ VIOLATION │
+└──────────────┴────────┴──────┴──────┴───────┴───────────┘
+⚠ 3 failing check(s) on sensitive (pii/pci/phi/confidential) data.
+```
+
+Group `--by owner` to route failures to a team, or `--by regulation` for a GDPR
+/ SOX posture. `--json` emits the same as auditable evidence for a compliance
+trail. The AI copilot may *suggest* classifications, but (like every check) they
+are reviewed and committed by a human — never auto-applied.
+
 ## Built-in checks
 
 `columns_exist`, `not_null`, `unique`, `in_set`, `in_range`, `matches_regex`,
