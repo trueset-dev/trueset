@@ -1,0 +1,22 @@
+suite: warehouse_vs_source
+dataset: warehouse_orders
+
+checks:
+  # counts happen to match (5 == 5) -- proves count parity alone is not enough
+  - type: row_count_parity
+    reference: source
+    tolerance: 0.0
+
+  # every warehouse order_id must trace back to a real source id
+  - type: referential_integrity
+    column: order_id
+    reference: source
+    ref_column: id
+
+  # join on the key and compare the actual values
+  - type: value_parity
+    key: order_id
+    columns: [amount, status]
+    reference: source
+    ref_key: id
+    ref_columns: [amount, status]

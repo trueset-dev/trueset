@@ -1,0 +1,6 @@
+order_id,amount,status
+1001,49.99,shipped
+1002,120.00,delivered
+1003,15.00,pending
+1004,999.99,shipped
+1006,42.00,cancelled

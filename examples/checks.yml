@@ -1,0 +1,34 @@
+suite: orders_quality
+dataset: orders
+
+checks:
+  - type: columns_exist
+    columns: [order_id, customer_id, amount, status, email, created_at]
+
+  - type: not_null
+    column: order_id
+
+  - type: unique
+    column: order_id
+
+  - type: not_null
+    column: amount
+
+  - type: in_range
+    column: amount
+    min: 0
+    max: 100000
+
+  - type: in_set
+    column: status
+    values: [pending, shipped, delivered, cancelled]
+
+  - type: matches_regex
+    column: email
+    pattern: '[^@\s]+@[^@\s]+\.[^@\s]+'
+    severity: warn        # bad emails warn, but don't fail the pipeline
+
+  - type: row_count
+    min: 1
+
+  - type: no_duplicate_rows

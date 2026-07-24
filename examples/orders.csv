@@ -1,0 +1,8 @@
+order_id,customer_id,amount,status,email,created_at
+1001,C001,49.99,shipped,alice@example.com,2026-01-05
+1002,C002,120.00,delivered,bob@example.com,2026-01-06
+1003,C003,-5.00,pending,carol@example.com,2026-01-07
+1004,C004,89.50,shipped,not-an-email,2026-01-08
+1005,C005,15.00,teleported,dave@example.com,2026-01-09
+1006,C006,,delivered,eve@example.com,2026-01-10
+1002,C002,120.00,delivered,bob@example.com,2026-01-06

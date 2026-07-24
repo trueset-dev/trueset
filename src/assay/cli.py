@@ -1,0 +1,193 @@
+"""Command line interface.
+
+    assay run --data orders.csv --checks checks.yml
+    assay run --data orders.csv --checks checks.yml --json
+    assay list-checks
+
+Exit code is non-zero when any ERROR-severity check fails, so it drops
+straight into CI / dbt / Airflow.
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+import click
+import pandas as pd
+from rich.console import Console
+from rich.table import Table
+
+from .backends.pandas_backend import PandasBackend
+from .checks import available_checks
+from .result import Status
+from .suite import Suite
+
+console = Console()
+
+
+def _load_data(path: str) -> pd.DataFrame:
+    p = Path(path)
+    if p.suffix.lower() in {".csv", ".tsv"}:
+        sep = "\t" if p.suffix.lower() == ".tsv" else ","
+        return pd.read_csv(p, sep=sep)
+    if p.suffix.lower() in {".parquet", ".pq"}:
+        return pd.read_parquet(p)
+    if p.suffix.lower() in {".json",}:
+        return pd.read_json(p)
+    raise click.ClickException(f"unsupported data format: {p.suffix}")
+
+
+def _render(result) -> None:
+    table = Table(title=f"assay :: {result.name}", show_lines=False)
+    for col in ("check", "column", "status", "sev", "failing / total", "detail"):
+        table.add_column(col)
+
+    style = {Status.PASS: "green", Status.FAIL: "red", Status.ERROR: "yellow"}
+    glyph = {Status.PASS: "PASS", Status.FAIL: "FAIL", Status.ERROR: "ERR "}
+
+    for r in result.results:
+        ft = ""
+        if r.failing_rows is not None and r.total_rows is not None:
+            ft = f"{r.failing_rows} / {r.total_rows}"
+        table.add_row(
+            r.check,
+            r.column or "-",
+            f"[{style[r.status]}]{glyph[r.status]}[/]",
+            r.severity.value,
+            ft,
+            r.message or "",
+        )
+    console.print(table)
+    c = result.counts
+    verdict = "[green]PASSED[/]" if result.passed else "[red]FAILED[/]"
+    console.print(
+        f"{verdict}  pass={c['pass']} fail={c['fail']} "
+        f"error={c['error']} (warn-only={c['warn']})"
+    )
+
+
+@click.group()
+@click.version_option()
+def cli() -> None:
+    """assay -- portable data quality checks."""
+
+
+@cli.command()
+@click.option("--data", required=True, help="Path to CSV/TSV/Parquet/JSON data.")
+@click.option("--checks", "checks_path", required=True, help="Path to a checks YAML file.")
+@click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON.")
+def run(data: str, checks_path: str, as_json: bool) -> None:
+    """Run a check suite against a dataset."""
+    df = _load_data(data)
+    suite = Suite.from_yaml(checks_path)
+    result = suite.run(PandasBackend(df))
+
+    if as_json:
+        console.print_json(json.dumps(result.to_dict()))
+        sys.exit(0 if result.passed else 1)
+
+    _render(result)
+    sys.exit(0 if result.passed else 1)
+
+
+@cli.command()
+@click.option("--data", required=True, help="Primary dataset (the one being validated).")
+@click.option("--checks", "checks_path", required=True, help="Reconciliation checks YAML.")
+@click.option(
+    "--ref",
+    "refs",
+    multiple=True,
+    metavar="NAME=PATH",
+    help="A reference dataset, e.g. --ref source=orders_source.csv (repeatable).",
+)
+@click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON.")
+def reconcile(data: str, checks_path: str, refs: tuple[str, ...], as_json: bool) -> None:
+    """Validate a dataset AGAINST other systems (cross-source reconciliation)."""
+    primary = PandasBackend(_load_data(data))
+    references = {}
+    for spec in refs:
+        if "=" not in spec:
+            raise click.ClickException(f"--ref must be NAME=PATH, got: {spec}")
+        name, path = spec.split("=", 1)
+        references[name] = PandasBackend(_load_data(path))
+
+    suite = Suite.from_yaml(checks_path)
+    result = suite.run(primary, references=references)
+
+    if as_json:
+        console.print_json(json.dumps(result.to_dict()))
+        sys.exit(0 if result.passed else 1)
+
+    _render(result)
+    sys.exit(0 if result.passed else 1)
+
+
+@cli.command()
+@click.option("--data", required=True, help="Path to CSV/TSV/Parquet/JSON data.")
+@click.option("--out", "out_path", default=None, help="Write draft suite to this YAML.")
+@click.option("--ai", is_flag=True, help="Use the AI copilot (needs ANTHROPIC_API_KEY).")
+@click.option("--describe", default=None, help="Plain-English intent (implies --ai).")
+def suggest(data: str, out_path: str | None, ai: bool, describe: str | None) -> None:
+    """Draft a check suite from your data (deterministic, or AI-assisted).
+
+    Whatever the source, every proposed check is validated against the
+    deterministic registry -- so the output is always something you can read,
+    trust, and commit.
+    """
+    import yaml as _yaml
+
+    from .profile import profile_dataframe, suggest_from_profile
+
+    df = _load_data(data)
+
+    if describe or ai:
+        from .copilot import anthropic_completer, checks_from_profile, checks_from_text
+
+        try:
+            complete = anthropic_completer()
+        except RuntimeError as e:
+            raise click.ClickException(str(e)) from e
+        if describe:
+            suite = checks_from_text(describe, list(df.columns), complete)
+        else:
+            suite = checks_from_profile(profile_dataframe(df), complete)
+    else:
+        suite = suggest_from_profile(profile_dataframe(df))
+
+    text = _yaml.safe_dump(suite, sort_keys=False)
+    if out_path:
+        Path(out_path).write_text(text)
+        console.print(f"[green]wrote[/] {out_path}  ({len(suite['checks'])} checks)")
+    else:
+        console.print(text)
+
+
+@cli.command()
+@click.option("--data", required=True, help="Path to CSV/TSV/Parquet/JSON data.")
+def profile(data: str) -> None:
+    """Profile a dataset (stats + inferred semantic type per column)."""
+    from .profile import profile_dataframe
+
+    df = _load_data(data)
+    prof = profile_dataframe(df)
+    table = Table(title=f"profile :: {Path(data).name} ({prof.rows} rows)")
+    for col in ("column", "dtype", "inferred", "nulls", "distinct", "unique"):
+        table.add_column(col)
+    for c in prof.columns:
+        table.add_row(
+            c.name, c.dtype, c.inferred, str(c.nulls), str(c.distinct), str(c.is_unique)
+        )
+    console.print(table)
+
+
+@cli.command(name="list-checks")
+def list_checks() -> None:
+    """List available check types."""
+    for name in available_checks():
+        console.print(f"  - {name}")
+
+
+if __name__ == "__main__":
+    cli()
