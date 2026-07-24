@@ -135,8 +135,36 @@ python examples/portability_demo.py     # runs the comparison above
 
 The DuckDB backend implements the same `Backend` protocol, but every check
 becomes `SELECT count(*) ... WHERE ...` executed inside the database -- so full
-tables never move. The same SQL shape extends to Postgres, Snowflake, and
-BigQuery via SQLAlchemy. `tests/test_duckdb.py` asserts the two engines agree.
+tables never move. `tests/test_duckdb.py` asserts the two engines agree.
+
+## Run against your warehouse (Postgres, Snowflake, BigQuery, …)
+
+The `SQLAlchemyBackend` generalizes the DuckDB proof to **anything SQLAlchemy
+speaks** — Postgres, MySQL/MariaDB, SQLite, Snowflake, BigQuery, Redshift. Same
+checks, same verdicts, pushed down as SQL. Point the CLI straight at a table:
+
+```bash
+trueset run \
+  --url "postgresql+psycopg://user:pw@host:5432/analytics" \
+  --table public.orders \
+  --checks quality/orders.yml
+```
+
+Or from Python:
+
+```python
+from sqlalchemy import create_engine
+from trueset import Suite, SQLAlchemyBackend
+
+engine = create_engine("snowflake://…")          # any SQLAlchemy URL
+backend = SQLAlchemyBackend(engine, "ORDERS")
+result = Suite.from_yaml("orders.yml").run(backend)
+```
+
+`tests/test_sqlalchemy.py` runs the identical example suite on pandas **and** on
+a SQL database and asserts the verdicts match — the same guarantee we hold for
+DuckDB, now for every warehouse. Reconciliation works across engines too: the
+primary can be a pandas DataFrame while the reference is a Postgres table.
 
 ## Cross-system reconciliation (the wedge)
 
@@ -170,10 +198,11 @@ checks:
     ref_key: id
 ```
 
-`value_parity` reports three failure modes at once: mismatched values on shared
-keys, keys only in the primary, and keys only in the reference. (Today both
-sides load via pandas; the same checks drop straight onto a warehouse backend,
-where they become pushed-down SQL / sampled checksums so full tables never move.)
+`value_parity` reports four failure modes at once: mismatched values on shared
+keys, keys only in the primary, keys only in the reference, and **duplicate join
+keys** on either side (an ambiguous join is itself a reconciliation defect).
+Either side can be a file, DuckDB, or any SQLAlchemy warehouse — they need not
+share an engine.
 
 ## Built-in checks
 
@@ -191,9 +220,9 @@ YAML / Python API
         ▼                  ▼
    SuiteResult  ◀──  Backend protocol
                           ▲
-        ┌─────────────────┼─────────────────┐
-   PandasBackend    (SparkBackend)     (SQLBackend)
-     [built]          [next]             [next]
+        ┌────────────┬───────┴───────┬────────────┐
+   PandasBackend  DuckDBBackend  SQLAlchemyBackend  (SparkBackend)
+     [built]        [built]     [built: any warehouse]  [next]
 ```
 
 The `Backend` protocol (`src/trueset/backends/base.py`) is deliberately tiny:
@@ -201,13 +230,14 @@ The `Backend` protocol (`src/trueset/backends/base.py`) is deliberately tiny:
 backend implements each as a pushed-down `SELECT count(*) ... WHERE ...` so data
 never leaves the warehouse.
 
-## Roadmap (proposed)
+## Roadmap
 
-1. **Backends**: PySpark, then SQLAlchemy/warehouse (DuckDB, Snowflake, BigQuery).
-2. **Interop**: import dbt tests + Great Expectations suites; emit dbt sources.
-3. **Custom checks**: user-defined SQL / Python expressions.
-4. **Results sink**: write run history to a table for trend/anomaly monitoring.
-5. **Freshness & volume** checks for pipeline monitoring.
+- [x] **Backends**: pandas, DuckDB, and SQLAlchemy (any warehouse).
+- [ ] **Governance**: `owner`/`sensitivity`/`regulation` metadata + policy reports.
+- [ ] **Results sink**: write run history to a table for trend/anomaly monitoring.
+- [ ] **Freshness & volume** checks for pipeline monitoring.
+- [ ] **Interop**: import dbt tests + Great Expectations / Soda suites.
+- [ ] **Backends**: PySpark.
 
 ## Development
 

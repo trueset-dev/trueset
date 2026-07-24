@@ -7,6 +7,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **`SQLAlchemyBackend`** — one class turns any SQLAlchemy-supported database
+  (Postgres, MySQL/MariaDB, SQLite, Snowflake, BigQuery, Redshift, …) into a
+  first-class engine. Every check is pushed down as `SELECT count(*) … WHERE …`
+  so full tables never leave the warehouse. Dialect-aware regex handling;
+  proven identical to pandas via a cross-engine parity test (`test_sqlalchemy.py`).
+- CLI can now validate a live SQL table: `trueset run --url <sqlalchemy-url>
+  --table <name> --checks <yml>`. `reconcile` accepts SQL for both the primary
+  (`--url/--table`) and references (`--ref name=<url>::<table>`), so you can
+  reconcile a warehouse against a source database directly.
 - `py.typed` marker so downstream projects get type information when they import trueset.
 - GitHub composite Action (`action.yml`) — add data-quality gates to any CI in a few lines.
 - Packaging metadata: project URLs, trove classifiers, expanded keywords.

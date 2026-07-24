@@ -14,6 +14,10 @@ try:  # optional -- only if the [sql] extra is installed
     from .backends.duckdb_backend import DuckDBBackend
 except Exception:  # pragma: no cover
     DuckDBBackend = None  # type: ignore
+try:  # optional -- only if the [sql] extra (sqlalchemy) is installed
+    from .backends.sqlalchemy_backend import SQLAlchemyBackend
+except Exception:  # pragma: no cover
+    SQLAlchemyBackend = None  # type: ignore
 from .profile import DatasetProfile, profile_dataframe, suggest_from_profile
 from .reconcile import (
     ReconciliationCheck,
@@ -34,6 +38,7 @@ __all__ = [
     "Status",
     "PandasBackend",
     "DuckDBBackend",
+    "SQLAlchemyBackend",
     "build_check",
     "available_checks",
     "validate_dataframe",

@@ -53,6 +53,47 @@ def _load_suite(path: str) -> Suite:
         raise click.ClickException(str(exc)) from exc
 
 
+def _sql_backend(url: str, table: str):
+    """Build a SQLAlchemyBackend, with friendly errors if [sql] is missing."""
+    try:
+        from sqlalchemy import create_engine
+
+        from .backends.sqlalchemy_backend import SQLAlchemyBackend
+    except Exception as exc:  # sqlalchemy not installed
+        raise click.ClickException(
+            "SQL sources need the [sql] extra:  pip install 'trueset[sql]'"
+        ) from exc
+    try:
+        return SQLAlchemyBackend(create_engine(url), table)
+    except Exception as exc:
+        raise click.ClickException(f"could not open table '{table}' at {url}: {exc}") from exc
+
+
+def _primary_backend(data: str | None, url: str | None, table: str | None):
+    """Resolve the dataset under test: a file (--data) or a SQL table (--url/--table)."""
+    if url:
+        if not table:
+            raise click.ClickException("--table is required when using --url")
+        return _sql_backend(url, table)
+    if not data:
+        raise click.ClickException(
+            "provide a source: --data <file>  OR  --url <sqlalchemy-url> --table <name>"
+        )
+    return PandasBackend(_load_data(data))
+
+
+def _reference_backend(value: str):
+    """A --ref value is either a file path or a SQL 'url::table' spec."""
+    if "://" in value:  # looks like a SQLAlchemy URL
+        url, sep, table = value.partition("::")
+        if not sep:
+            raise click.ClickException(
+                f"SQL reference must be URL::TABLE, got: {value}"
+            )
+        return _sql_backend(url, table)
+    return PandasBackend(_load_data(value))
+
+
 def _render(result) -> None:
     table = Table(title=f"trueset :: {result.name}", show_lines=False)
     for col in ("check", "column", "status", "sev", "failing / total", "detail"):
@@ -89,14 +130,16 @@ def cli() -> None:
 
 
 @cli.command()
-@click.option("--data", required=True, help="Path to CSV/TSV/Parquet/JSON data.")
+@click.option("--data", default=None, help="Path to CSV/TSV/Parquet/JSON data.")
+@click.option("--url", default=None, help="SQLAlchemy URL of a database to validate in place.")
+@click.option("--table", default=None, help="Table name to validate (with --url).")
 @click.option("--checks", "checks_path", required=True, help="Path to a checks YAML file.")
 @click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON.")
-def run(data: str, checks_path: str, as_json: bool) -> None:
-    """Run a check suite against a dataset."""
-    df = _load_data(data)
+def run(data: str | None, url: str | None, table: str | None, checks_path: str, as_json: bool) -> None:
+    """Run a check suite against a dataset (a file, or a SQL table via --url/--table)."""
+    backend = _primary_backend(data, url, table)
     suite = _load_suite(checks_path)
-    result = suite.run(PandasBackend(df))
+    result = suite.run(backend)
 
     if as_json:
         console.print_json(json.dumps(result.to_dict()))
@@ -107,25 +150,40 @@ def run(data: str, checks_path: str, as_json: bool) -> None:
 
 
 @cli.command()
-@click.option("--data", required=True, help="Primary dataset (the one being validated).")
+@click.option("--data", default=None, help="Primary dataset file (the one being validated).")
+@click.option("--url", default=None, help="SQLAlchemy URL for the primary (with --table).")
+@click.option("--table", default=None, help="Primary table name (with --url).")
 @click.option("--checks", "checks_path", required=True, help="Reconciliation checks YAML.")
 @click.option(
     "--ref",
     "refs",
     multiple=True,
-    metavar="NAME=PATH",
-    help="A reference dataset, e.g. --ref source=orders_source.csv (repeatable).",
+    metavar="NAME=SOURCE",
+    help=(
+        "A reference, repeatable. SOURCE is a file path (source=orders.csv) or a "
+        "SQL table (source=postgresql://host/db::orders)."
+    ),
 )
 @click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON.")
-def reconcile(data: str, checks_path: str, refs: tuple[str, ...], as_json: bool) -> None:
-    """Validate a dataset AGAINST other systems (cross-source reconciliation)."""
-    primary = PandasBackend(_load_data(data))
+def reconcile(
+    data: str | None,
+    url: str | None,
+    table: str | None,
+    checks_path: str,
+    refs: tuple[str, ...],
+    as_json: bool,
+) -> None:
+    """Validate a dataset AGAINST other systems (cross-source reconciliation).
+
+    Primary and each reference can independently be a file or a SQL table, so
+    you can reconcile a warehouse against a source database directly."""
+    primary = _primary_backend(data, url, table)
     references = {}
     for spec in refs:
         if "=" not in spec:
-            raise click.ClickException(f"--ref must be NAME=PATH, got: {spec}")
-        name, path = spec.split("=", 1)
-        references[name] = PandasBackend(_load_data(path))
+            raise click.ClickException(f"--ref must be NAME=SOURCE, got: {spec}")
+        name, source = spec.split("=", 1)
+        references[name] = _reference_backend(source)
 
     suite = _load_suite(checks_path)
     result = suite.run(primary, references=references)
