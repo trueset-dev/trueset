@@ -60,6 +60,30 @@ print(result.to_dict())                 # JSON-ready, ship to a warehouse/dashbo
 The CLI exits non-zero when any `error`-severity check fails, so it drops
 straight into CI, dbt, or Airflow.
 
+## Use it anywhere in your pipeline (not just the warehouse)
+
+trueset is a **library first**. Because checks only speak to the `Backend`
+protocol and the pandas backend takes any DataFrame, you can validate data
+*in flight* — at ingestion, before loading — and fail the pipeline the instant a
+batch is bad, so garbage never reaches storage (the "shift-left" pattern):
+
+```python
+from trueset import validate_dataframe
+
+df = extract_from_api()                        # your ingestion step
+result = validate_dataframe(df, "checks.yml")  # same suite, in-memory
+if not result.passed:
+    raise ValueError(f"bad batch, not loading: {result.counts}")   # fail the task
+load_to_warehouse(df)                          # only reached if data is clean
+```
+
+Drop that into an Airflow `PythonOperator`, a Dagster op, a Prefect task, a
+Lambda, or a plain script. The *same* `checks.yml` then runs post-load against
+the warehouse (`SQLAlchemyBackend`) and in CI (the Action) — write once, enforce
+at ingestion, in transit, and at rest. See
+[`examples/pipeline_demo.py`](examples/pipeline_demo.py) for a runnable gate.
+(Batch / micro-batch oriented; native Spark validation is on the roadmap.)
+
 ## Gate your CI in three lines
 
 trueset ships a GitHub Action, so a data-quality check becomes a required status
