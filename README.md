@@ -244,11 +244,33 @@ Group `--by owner` to route failures to a team, or `--by regulation` for a GDPR
 trail. The AI copilot may *suggest* classifications, but (like every check) they
 are reviewed and committed by a human — never auto-applied.
 
+## Monitoring: freshness & volume
+
+Turn one-shot validation into continuous monitoring. Persist runs, then watch for
+staleness and volume drift:
+
+```bash
+trueset run --url "postgresql://…" --table orders --checks orders.yml --save "postgresql://…/trueset_history"
+trueset history --store "postgresql://…/trueset_history"      # the audit trail
+trueset monitor --store "postgresql://…/trueset_history" --suite orders_quality --sigma 3
+```
+
+- **`freshness`** is an ordinary check — the newest timestamp must be recent:
+  ```yaml
+  - type: freshness
+    column: created_at
+    max_age_hours: 6        # fail if the table hasn't updated in 6 hours
+  ```
+- **`trueset monitor`** compares the latest run's row count to the baseline of
+  past runs and exits non-zero on a >`sigma`-σ anomaly (a silent 90% drop in
+  rows is caught even when every row that *is* there passes every check).
+
 ## Built-in checks
 
 `columns_exist`, `not_null`, `unique`, `in_set`, `in_range`, `matches_regex`,
-`row_count`, `no_duplicate_rows`. Each has a `severity` of `error` (default) or
-`warn`.
+`row_count`, `no_duplicate_rows`, `freshness`, plus the reconciliation checks
+`row_count_parity`, `referential_integrity`, `value_parity`. Each has a
+`severity` of `error` (default) or `warn`.
 
 ## Architecture
 

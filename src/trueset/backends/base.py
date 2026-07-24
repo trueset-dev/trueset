@@ -54,3 +54,10 @@ class Backend(Protocol):
     def count_regex_mismatch(self, column: str, pattern: str) -> int:
         """Non-null values that do NOT fully match `pattern`."""
         ...
+
+    def max_value(self, column: str) -> Any:
+        """The maximum non-null value of `column` (None if empty/all-null).
+
+        Used by freshness monitoring: the newest timestamp in a column.
+        """
+        ...

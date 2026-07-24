@@ -7,6 +7,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **Monitoring.** New `freshness` check — the newest value in a timestamp column
+  must be within `max_age_hours` of now (catches stale pipelines); runs on every
+  backend via a new `max_value` protocol primitive, proven identical across
+  pandas/DuckDB/SQLAlchemy. New `trueset monitor` command + `volume_anomaly()`
+  flag a sudden drop/spike in row volume vs the baseline of past runs (reads the
+  results store), exiting non-zero on an anomaly for CI.
 - **Results-history persistence** (`ResultStore`, needs `[sql]`). Persist every
   run to any SQLAlchemy database (SQLite → Postgres/Snowflake) as an auditable
   trail: `trueset run … --save <url>` and `trueset history --store <url>`. Two

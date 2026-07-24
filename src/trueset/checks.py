@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
+from datetime import date, datetime
 from typing import Any
 
 from .backends.base import Backend
@@ -244,6 +245,79 @@ class NoDuplicateRows(Check):
         )
 
 
+def _parse_timestamp(value: Any) -> datetime:
+    """Coerce a backend's max-value (Timestamp, date, or ISO string) to datetime."""
+    if isinstance(value, datetime):  # pandas Timestamp is a datetime subclass
+        return value
+    if isinstance(value, date):
+        return datetime(value.year, value.month, value.day)
+    return datetime.fromisoformat(str(value))
+
+
+class Freshness(Check):
+    """The newest value in a timestamp column is within `max_age_hours` of now.
+
+    This is the core monitoring check: a stale table (no recent rows) is a
+    silent pipeline failure. `now` is injectable so runs are deterministic and
+    testable. Works on any backend via the `max_value` primitive.
+    """
+
+    type = "freshness"
+
+    def __init__(
+        self,
+        column: str,
+        max_age_hours: float,
+        now: datetime | str | None = None,
+        **kw,
+    ):
+        super().__init__(**kw)
+        self.column = column
+        self.max_age_hours = float(max_age_hours)
+        self.now = _parse_timestamp(now) if isinstance(now, str) else now
+
+    def evaluate(self, backend: Backend) -> CheckResult:
+        if (err := self._fail_if_missing(backend, self.column)):
+            return err
+        latest_raw = backend.max_value(self.column)
+        total = backend.row_count()
+        if latest_raw is None:
+            return CheckResult(
+                check=self.type, column=self.column, status=Status.FAIL,
+                severity=self.severity, total_rows=total, failing_rows=total,
+                message=f"no non-null values in '{self.column}'", meta=self.meta,
+            )
+        try:
+            latest = _parse_timestamp(latest_raw)
+        except (ValueError, TypeError):
+            return CheckResult(
+                check=self.type, column=self.column, status=Status.ERROR,
+                severity=self.severity, observed=str(latest_raw), meta=self.meta,
+                message=f"could not parse '{latest_raw}' as a timestamp",
+            )
+        now = self.now or datetime.now(latest.tzinfo)
+        age_hours = (now - latest).total_seconds() / 3600.0
+        ok = age_hours <= self.max_age_hours
+        return CheckResult(
+            check=self.type,
+            column=self.column,
+            status=Status.PASS if ok else Status.FAIL,
+            severity=self.severity,
+            observed={
+                "latest": str(latest_raw),
+                "age_hours": round(age_hours, 3),
+                "max_age_hours": self.max_age_hours,
+            },
+            total_rows=total,
+            failing_rows=0 if ok else 1,
+            message="" if ok else (
+                f"stale: newest '{self.column}' is {age_hours:.1f}h old "
+                f"(max {self.max_age_hours:.1f}h)"
+            ),
+            meta=self.meta,
+        )
+
+
 # --------------------------------------------------------------------------- #
 # Registry
 # --------------------------------------------------------------------------- #
@@ -265,6 +339,7 @@ for _c in (
     MatchesRegex,
     RowCount,
     NoDuplicateRows,
+    Freshness,
 ):
     register(_c)
 

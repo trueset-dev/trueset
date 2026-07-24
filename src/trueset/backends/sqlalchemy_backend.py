@@ -130,6 +130,12 @@ class SQLAlchemyBackend:
         )
         return int(self._scalar(stmt))
 
+    def max_value(self, column: str) -> Any:
+        col = self._col(column)
+        return self._scalar(
+            select(func.max(col)).select_from(self.table).where(col.is_not(None))
+        )
+
     # -- reconciliation primitives ------------------------------------------- #
     # These read distinct keys / a key->row map from the reference so a check
     # can compare two systems. They materialize the projected columns (not the

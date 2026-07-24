@@ -22,6 +22,7 @@ from rich.table import Table
 from .backends.pandas_backend import PandasBackend
 from .checks import available_checks
 from .governance import BY_DIMENSIONS, group_results
+from .monitoring import volume_anomaly
 from .result import Status
 from .suite import Suite, SuiteLoadError
 
@@ -391,6 +392,43 @@ def history(store_url: str, suite: str | None, limit: int, as_json: bool) -> Non
             str(r["n_pass"]), str(r["n_fail"]), str(r["n_error"]), verdict,
         )
     console.print(table)
+
+
+@cli.command()
+@click.option("--store", "store_url", required=True, help="Results store (SQLAlchemy URL) to read.")
+@click.option("--suite", required=True, help="Suite whose row-count history to monitor.")
+@click.option("--dataset", default=None, help="Restrict to one dataset.")
+@click.option("--sigma", default=3.0, show_default=True, help="Std-devs from baseline that count as an anomaly.")
+@click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON.")
+def monitor(store_url: str, suite: str, dataset: str | None, sigma: float, as_json: bool) -> None:
+    """Flag a volume anomaly in the latest run vs its historical baseline.
+
+    Reads row-count history from a results store (populated by `run --save`) and
+    exits non-zero if the newest run's volume is more than `sigma` standard
+    deviations from the baseline -- a sudden drop or spike in rows."""
+    store = _open_store(store_url)
+    history = [rows for _ts, rows in store.row_count_history(suite, dataset=dataset)]
+    verdict = volume_anomaly(history, sigma=sigma)
+
+    if as_json:
+        console.print_json(json.dumps(verdict))
+    elif verdict["status"] == "insufficient_history":
+        console.print(
+            f"[yellow]not enough history[/]: have {verdict['have']} run(s), "
+            f"need {verdict['need']} to establish a baseline."
+        )
+    elif verdict["anomaly"]:
+        console.print(
+            f"[red]VOLUME ANOMALY[/]: current={verdict['current']} rows vs "
+            f"baseline mean={verdict['baseline_mean']} (std={verdict['baseline_std']}, "
+            f"z={verdict['zscore']}, sigma={sigma})"
+        )
+    else:
+        console.print(
+            f"[green]OK[/]: current={verdict['current']} rows within "
+            f"{sigma}σ of baseline mean={verdict['baseline_mean']}."
+        )
+    sys.exit(1 if verdict.get("anomaly") else 0)
 
 
 @cli.command(name="list-checks")

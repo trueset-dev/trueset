@@ -99,6 +99,12 @@ class DuckDBBackend:
         )
         return int(self._scalar(sql, [pattern]))
 
+    def max_value(self, column: str) -> Any:
+        return self._scalar(
+            f"SELECT max({_q(column)}) FROM {_q(self.table)} "
+            f"WHERE {_q(column)} IS NOT NULL"
+        )
+
     # -- reconciliation primitives ------------------------------------------- #
 
     def distinct_values(self, column: str) -> set:

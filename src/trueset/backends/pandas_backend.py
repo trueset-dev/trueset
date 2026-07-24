@@ -59,6 +59,12 @@ class PandasBackend:
         matches = s.str.fullmatch(pattern)
         return int((~matches.fillna(False)).sum())
 
+    def max_value(self, column: str) -> Any:
+        s = self.df[column].dropna()
+        if s.empty:
+            return None
+        return s.max()
+
     # -- reconciliation primitives (cross-system) ---------------------------- #
     # In a warehouse backend these become pushed-down SQL / sampled checksums
     # (the data-diff approach) so we never pull full tables locally. For the
