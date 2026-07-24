@@ -30,6 +30,17 @@ class Check(ABC):
     def evaluate(self, backend: Backend) -> CheckResult:
         ...
 
+    def failure_spec(self) -> dict[str, Any] | None:
+        """The per-row failure predicate for this check, or None.
+
+        Row-wise checks (not_null, in_set, ...) return a small engine-agnostic
+        spec a backend can turn into "the rows that failed" -- enabling quarantine
+        / dead-letter routing. Dataset-level checks (row_count, metric, freshness,
+        columns_exist) and cross-system checks return None: they don't fail on a
+        per-row basis, so there are no individual rows to extract.
+        """
+        return None
+
     # -- helpers so subclasses stay tiny -------------------------------------
 
     def _fail_if_missing(self, backend: Backend, column: str) -> CheckResult | None:
@@ -108,6 +119,9 @@ class NotNull(Check):
             message="" if nulls == 0 else f"{nulls} null value(s)",
         )
 
+    def failure_spec(self) -> dict[str, Any]:
+        return {"kind": "null", "column": self.column}
+
 
 class Unique(Check):
     type = "unique"
@@ -132,6 +146,9 @@ class Unique(Check):
             message="" if dupes == 0 else f"{dupes} duplicate value(s)",
         )
 
+    def failure_spec(self) -> dict[str, Any]:
+        return {"kind": "duplicate_value", "column": self.column}
+
 
 class InSet(Check):
     type = "in_set"
@@ -152,6 +169,9 @@ class InSet(Check):
             observed=bad,
             message="" if bad == 0 else f"{bad} value(s) outside allowed set",
         )
+
+    def failure_spec(self) -> dict[str, Any]:
+        return {"kind": "not_in_set", "column": self.column, "allowed": self.values}
 
 
 class InRange(Check):
@@ -181,6 +201,9 @@ class InRange(Check):
             message="" if bad == 0 else f"{bad} value(s) out of [{self.min}, {self.max}]",
         )
 
+    def failure_spec(self) -> dict[str, Any]:
+        return {"kind": "out_of_range", "column": self.column, "min": self.min, "max": self.max}
+
 
 class MatchesRegex(Check):
     type = "matches_regex"
@@ -201,6 +224,9 @@ class MatchesRegex(Check):
             observed=bad,
             message="" if bad == 0 else f"{bad} value(s) do not match /{self.pattern}/",
         )
+
+    def failure_spec(self) -> dict[str, Any]:
+        return {"kind": "regex_mismatch", "column": self.column, "pattern": self.pattern}
 
 
 class RowCount(Check):
@@ -243,6 +269,9 @@ class NoDuplicateRows(Check):
             observed=dupes,
             message="" if dupes == 0 else f"{dupes} duplicate row(s)",
         )
+
+    def failure_spec(self) -> dict[str, Any]:
+        return {"kind": "duplicate_row", "subset": self.subset}
 
 
 _AGGS = ("sum", "avg", "min", "max", "count")

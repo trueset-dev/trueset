@@ -118,6 +118,64 @@ class DuckDBBackend:
         )
         return None if val is None else float(val)
 
+    # -- failing-row extraction ---------------------------------------------- #
+
+    def _failing_where(self, spec: dict) -> tuple[str, list]:
+        kind = spec["kind"]
+        col = _q(spec["column"]) if spec.get("column") else None
+        if kind == "null":
+            return f"{col} IS NULL", []
+        if kind == "not_in_set":
+            allowed = list(spec["allowed"])
+            if not allowed:
+                return f"{col} IS NOT NULL", []
+            ph = ", ".join(["?"] * len(allowed))
+            return f"{col} IS NOT NULL AND {col} NOT IN ({ph})", allowed
+        if kind == "out_of_range":
+            val = f"TRY_CAST({col} AS DOUBLE)"
+            conds, params = [], []
+            if spec.get("min") is not None:
+                conds.append(f"{val} < ?")
+                params.append(spec["min"])
+            if spec.get("max") is not None:
+                conds.append(f"{val} > ?")
+                params.append(spec["max"])
+            if not conds:
+                return "false", []
+            return f"{val} IS NOT NULL AND ({' OR '.join(conds)})", params
+        if kind == "regex_mismatch":
+            return (
+                f"{col} IS NOT NULL AND "
+                f"NOT regexp_full_match(CAST({col} AS VARCHAR), ?)",
+                [spec["pattern"]],
+            )
+        if kind == "duplicate_value":
+            t = _q(self.table)
+            return (
+                f"{col} IS NOT NULL AND {col} IN "
+                f"(SELECT {col} FROM {t} WHERE {col} IS NOT NULL "
+                f"GROUP BY {col} HAVING count(*) > 1)",
+                [],
+            )
+        raise ValueError(f"unknown failure kind: {spec.get('kind')!r}")
+
+    def failing_rows(self, spec: dict, limit: int | None = None) -> list[dict]:
+        lim = f" LIMIT {int(limit)}" if limit is not None else ""
+        if spec["kind"] == "duplicate_row":
+            cols = list(spec["subset"]) if spec.get("subset") else self.columns()
+            partition = ", ".join(_q(c) for c in cols)
+            cur = self.con.execute(
+                f"SELECT * FROM {_q(self.table)} "
+                f"QUALIFY count(*) OVER (PARTITION BY {partition}) > 1{lim}"
+            )
+        else:
+            where, params = self._failing_where(spec)
+            cur = self.con.execute(
+                f"SELECT * FROM {_q(self.table)} WHERE {where}{lim}", params
+            )
+        cols = [d[0] for d in cur.description]
+        return [dict(zip(cols, row, strict=False)) for row in cur.fetchall()]
+
     # -- reconciliation primitives ------------------------------------------- #
 
     def distinct_values(self, column: str) -> set:

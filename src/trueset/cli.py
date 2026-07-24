@@ -151,6 +151,7 @@ def cli() -> None:
 @click.option("--table", default=None, help="Table name to validate (with --url).")
 @click.option("--checks", "checks_path", required=True, help="Path to a checks YAML file.")
 @click.option("--save", "save_url", default=None, help="Persist this run to a results store (SQLAlchemy URL).")
+@click.option("--quarantine", "quarantine_path", default=None, help="Write failing rows here (CSV); requires --data.")
 @click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON.")
 def run(
     data: str | None,
@@ -158,12 +159,26 @@ def run(
     table: str | None,
     checks_path: str,
     save_url: str | None,
+    quarantine_path: str | None,
     as_json: bool,
 ) -> None:
     """Run a check suite against a dataset (a file, or a SQL table via --url/--table)."""
     backend = _primary_backend(data, url, table)
     suite = _load_suite(checks_path)
     result = suite.run(backend)
+
+    if quarantine_path:
+        if url:
+            raise click.ClickException("--quarantine works with --data files, not --url")
+        from .quarantine import split as _split
+
+        sp = _split(backend.df, suite)
+        sp.bad_annotated().to_csv(quarantine_path, index=False)
+        if not as_json:
+            console.print(
+                f"[yellow]quarantined[/] {sp.n_bad} row(s) -> {quarantine_path} "
+                f"(kept {sp.n_good} clean)"
+            )
 
     if save_url:
         run_id = _open_store(save_url).save(result, dataset=result.dataset or data or table)

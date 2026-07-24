@@ -70,3 +70,13 @@ class Backend(Protocol):
         return None when there are none. Used by the `metric` check.
         """
         ...
+
+    def failing_rows(self, spec: dict[str, Any], limit: int | None = None) -> list[dict]:
+        """Return the actual rows that fail a check's `failure_spec()` predicate.
+
+        `spec` is one of the engine-agnostic predicates a check produces (e.g.
+        ``{"kind": "null", "column": "email"}``). Returns up to `limit` rows as
+        plain dicts. This is what lets a pipeline quarantine / dead-letter the
+        bad rows -- trueset still only identifies them; the caller routes them.
+        """
+        ...

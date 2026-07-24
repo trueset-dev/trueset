@@ -76,6 +76,47 @@ class PandasBackend:
         op = {"sum": "sum", "avg": "mean", "min": "min", "max": "max"}[func]
         return float(getattr(s, op)())
 
+    # -- failing-row extraction (powers quarantine / dead-letter) ------------- #
+
+    def failing_mask(self, spec: dict[str, Any]) -> pd.Series:
+        """Boolean Series (index-aligned to the frame) marking rows that FAIL
+        the given predicate. Pandas-specific; the engine behind `split()`."""
+        df = self.df
+        kind = spec["kind"]
+        if kind == "null":
+            return df[spec["column"]].isna()
+        if kind == "not_in_set":
+            col = df[spec["column"]]
+            return col.notna() & ~col.isin(list(spec["allowed"]))
+        if kind == "out_of_range":
+            s = pd.to_numeric(df[spec["column"]], errors="coerce")
+            mask = pd.Series(False, index=df.index)
+            if spec.get("min") is not None:
+                mask |= s.notna() & (s < spec["min"])
+            if spec.get("max") is not None:
+                mask |= s.notna() & (s > spec["max"])
+            return mask
+        if kind == "regex_mismatch":
+            col = df[spec["column"]]
+            matches = col.dropna().astype(str).str.fullmatch(spec["pattern"])
+            mask = pd.Series(False, index=df.index)
+            mask.loc[matches.index] = ~matches.fillna(False)
+            return mask
+        if kind == "duplicate_value":
+            col = df[spec["column"]]
+            return col.notna() & col.duplicated(keep=False)
+        if kind == "duplicate_row":
+            subset = list(spec["subset"]) if spec.get("subset") else None
+            return df.duplicated(subset=subset, keep=False)
+        raise ValueError(f"unknown failure kind: {spec.get('kind')!r}")
+
+    def failing_rows(self, spec: dict[str, Any], limit: int | None = None) -> list[dict]:
+        rows = self.df[self.failing_mask(spec)]
+        if limit is not None:
+            rows = rows.head(limit)
+        rows = rows.astype(object).where(pd.notna(rows), None)
+        return rows.to_dict("records")
+
     # -- reconciliation primitives (cross-system) ---------------------------- #
     # In a warehouse backend these become pushed-down SQL / sampled checksums
     # (the data-diff approach) so we never pull full tables locally. For the

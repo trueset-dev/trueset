@@ -25,6 +25,7 @@ try:  # optional -- results-history persistence (needs sqlalchemy)
 except Exception:  # pragma: no cover
     ResultStore = None  # type: ignore
 from .profile import DatasetProfile, profile_dataframe, suggest_from_profile
+from .quarantine import Split, split
 from .reconcile import (
     ReconciliationCheck,
     ReferentialIntegrity,
@@ -52,6 +53,8 @@ __all__ = [
     "split_meta",
     "volume_anomaly",
     "detect_anomaly",
+    "split",
+    "Split",
     "validate_dataframe",
     "profile_dataframe",
     "suggest_from_profile",

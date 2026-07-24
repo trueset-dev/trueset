@@ -151,6 +151,55 @@ class SQLAlchemyBackend:
         )
         return None if val is None else float(val)
 
+    # -- failing-row extraction ---------------------------------------------- #
+
+    def _failing_condition(self, spec: dict):
+        kind = spec["kind"]
+        if kind == "duplicate_row":
+            return None  # handled with a window function, not a WHERE
+        col = self._col(spec["column"])
+        if kind == "null":
+            return col.is_(None)
+        if kind == "not_in_set":
+            allowed = list(spec["allowed"])
+            return col.is_not(None) if not allowed else (col.is_not(None) & col.not_in(allowed))
+        if kind == "out_of_range":
+            val = cast(col, Float)
+            conds = []
+            if spec.get("min") is not None:
+                conds.append(val < spec["min"])
+            if spec.get("max") is not None:
+                conds.append(val > spec["max"])
+            if not conds:
+                return col.is_(None) & col.is_not(None)  # always false
+            return col.is_not(None) & _or(conds)
+        if kind == "regex_mismatch":
+            return col.is_not(None) & not_(_regex_matches_expr(self.engine, col, spec["pattern"]))
+        if kind == "duplicate_value":
+            dupes = (
+                select(col)
+                .where(col.is_not(None))
+                .group_by(col)
+                .having(func.count() > 1)
+            )
+            return col.is_not(None) & col.in_(dupes)
+        raise ValueError(f"unknown failure kind: {spec.get('kind')!r}")
+
+    def failing_rows(self, spec: dict, limit: int | None = None) -> list[dict]:
+        if spec["kind"] == "duplicate_row":
+            cols = [self._col(c) for c in spec["subset"]] if spec.get("subset") else list(self.table.c)
+            counted = (
+                select(self.table, func.count().over(partition_by=cols).label("_c"))
+                .subquery()
+            )
+            stmt = select(*[counted.c[c.name] for c in self.table.c]).where(counted.c._c > 1)
+        else:
+            stmt = select(self.table).where(self._failing_condition(spec))
+        if limit is not None:
+            stmt = stmt.limit(limit)
+        with self.engine.connect() as conn:
+            return [dict(row) for row in conn.execute(stmt).mappings().all()]
+
     # -- reconciliation primitives ------------------------------------------- #
     # These read distinct keys / a key->row map from the reference so a check
     # can compare two systems. They materialize the projected columns (not the

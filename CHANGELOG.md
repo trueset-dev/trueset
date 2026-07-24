@@ -7,6 +7,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **Failing-row extraction + quarantine.** Checks expose a per-row `failure_spec()`
+  and backends implement `failing_rows(spec, limit)` (pandas/DuckDB/SQLAlchemy,
+  proven identical). `trueset.split(df, suite)` partitions a batch into clean and
+  quarantined rows with per-row reasons (`bad_annotated()` adds a
+  `_trueset_reasons` column) — for dead-letter / quarantine routing at ingestion.
+  Only `error`-severity checks divert rows by default (`include_warnings=True` to
+  opt in). `trueset run --data … --quarantine bad.csv` writes failing rows to CSV.
+  trueset still only *identifies* the bad rows; the pipeline routes them.
 - **`metric` check** — validate an aggregate (sum/avg/min/max/count) `equals` a
   target within `tolerance`, or falls in a `min`/`max` range. For metrics/report
   validation ("total revenue ≈ X", "avg order value in [10, 100]"). Runs as a

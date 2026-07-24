@@ -84,6 +84,28 @@ at ingestion, in transit, and at rest. See
 [`examples/pipeline_demo.py`](examples/pipeline_demo.py) for a runnable gate.
 (Batch / micro-batch oriented; native Spark validation is on the roadmap.)
 
+### Quarantine bad rows, keep the clean ones flowing
+
+Blocking the whole batch is one option; routing is better. `split()` partitions a
+batch into clean and bad rows — with the reason each bad row failed — so you can
+dead-letter the bad and keep moving:
+
+```python
+from trueset import split
+
+result = split(df, "checks.yml")     # or a Suite / dict spec
+load_to_warehouse(result.good)       # clean rows proceed
+dead_letter(result.bad_annotated())  # bad rows + a `_trueset_reasons` column
+```
+
+Only `error`-severity checks divert a row by default (a `warn` surfaces the issue
+without quarantining it). From the CLI: `trueset run --data batch.csv --checks
+c.yml --quarantine bad.csv`. Under the hood, checks expose a per-row
+`failure_spec()` and every backend can return the actual failing rows
+(`backend.failing_rows(...)`) — identical across pandas, DuckDB, and SQL. trueset
+*identifies* the bad rows; **you** decide where they go. See
+[`examples/quarantine_demo.py`](examples/quarantine_demo.py).
+
 ## Gate your CI in three lines
 
 trueset ships a GitHub Action, so a data-quality check becomes a required status
