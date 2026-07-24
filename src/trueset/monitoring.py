@@ -56,3 +56,75 @@ def volume_anomaly(history: Sequence[int], sigma: float = 3.0) -> dict[str, Any]
         "sigma": sigma,
         "anomaly": anomaly,
     }
+
+
+# --------------------------------------------------------------------------- #
+# Generalized, pluggable detectors -- monitor ANY metric, not just row volume.
+# --------------------------------------------------------------------------- #
+
+DETECTORS = ("zscore", "mad")
+
+
+def _median(xs: list[float]) -> float:
+    s = sorted(xs)
+    n = len(s)
+    mid = n // 2
+    return s[mid] if n % 2 else (s[mid - 1] + s[mid]) / 2
+
+
+def detect_anomaly(
+    history: Sequence[float], sigma: float = 3.0, method: str = "zscore"
+) -> dict[str, Any]:
+    """Is the latest value an anomaly vs the baseline of prior values?
+
+    Deterministic and explainable -- never an opaque model. Two methods:
+
+    - ``zscore``: distance from the baseline MEAN in standard deviations. Simple,
+      but a single past outlier inflates the std and hides real anomalies.
+    - ``mad``: distance from the baseline MEDIAN in (scaled) median-absolute-
+      deviations. Robust -- a few bad past runs don't blind it.
+
+    The last element of `history` is the current value; the rest is the baseline.
+    Returns a uniform verdict: center/spread/score/anomaly.
+    """
+    if method not in DETECTORS:
+        raise ValueError(f"unknown method '{method}'. choose one of: {', '.join(DETECTORS)}")
+
+    data = [float(x) for x in history]
+    if len(data) < MIN_BASELINE + 1:
+        return {
+            "status": "insufficient_history",
+            "method": method,
+            "have": len(data),
+            "need": MIN_BASELINE + 1,
+            "anomaly": False,
+        }
+
+    *baseline, current = data
+    n = len(baseline)
+
+    if method == "zscore":
+        center = sum(baseline) / n
+        spread = (sum((x - center) ** 2 for x in baseline) / n) ** 0.5
+    else:  # mad
+        center = _median(baseline)
+        # 1.4826 scales MAD to be a consistent estimator of std for normal data
+        spread = 1.4826 * _median([abs(x - center) for x in baseline])
+
+    if spread == 0:
+        anomaly = current != center
+        score = None
+    else:
+        score = (current - center) / spread
+        anomaly = abs(score) > sigma
+
+    return {
+        "status": "ok",
+        "method": method,
+        "current": current,
+        "center": round(center, 3),
+        "spread": round(spread, 3),
+        "score": round(score, 3) if score is not None else None,
+        "sigma": sigma,
+        "anomaly": anomaly,
+    }

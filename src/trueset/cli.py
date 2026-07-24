@@ -22,7 +22,7 @@ from rich.table import Table
 from .backends.pandas_backend import PandasBackend
 from .checks import available_checks
 from .governance import BY_DIMENSIONS, group_results
-from .monitoring import volume_anomaly
+from .monitoring import DETECTORS, detect_anomaly
 from .result import Status
 from .suite import Suite, SuiteLoadError
 
@@ -397,37 +397,59 @@ def history(store_url: str, suite: str | None, limit: int, as_json: bool) -> Non
 
 @cli.command()
 @click.option("--store", "store_url", required=True, help="Results store (SQLAlchemy URL) to read.")
-@click.option("--suite", required=True, help="Suite whose row-count history to monitor.")
+@click.option("--suite", required=True, help="Suite whose history to monitor.")
+@click.option("--metric", default="rows", show_default=True, help="'rows', 'failing_rows', or 'total_rows'.")
+@click.option("--check", default=None, help="Check type to trend (needed for per-check metrics).")
+@click.option("--column", default=None, help="Restrict a per-check metric to one column.")
+@click.option("--method", type=click.Choice(DETECTORS), default="zscore", show_default=True, help="Detector.")
 @click.option("--dataset", default=None, help="Restrict to one dataset.")
-@click.option("--sigma", default=3.0, show_default=True, help="Std-devs from baseline that count as an anomaly.")
+@click.option("--sigma", default=3.0, show_default=True, help="Deviations from baseline that count as an anomaly.")
 @click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON.")
-def monitor(store_url: str, suite: str, dataset: str | None, sigma: float, as_json: bool) -> None:
-    """Flag a volume anomaly in the latest run vs its historical baseline.
+def monitor(
+    store_url: str,
+    suite: str,
+    metric: str,
+    check: str | None,
+    column: str | None,
+    method: str,
+    dataset: str | None,
+    sigma: float,
+    as_json: bool,
+) -> None:
+    """Flag an anomaly in the latest run vs its historical baseline.
 
-    Reads row-count history from a results store (populated by `run --save`) and
-    exits non-zero if the newest run's volume is more than `sigma` standard
-    deviations from the baseline -- a sudden drop or spike in rows."""
+    Trends any metric from a results store (populated by `run --save`) and exits
+    non-zero if the newest value deviates by more than `sigma` -- a sudden
+    volume drop/spike (`--metric rows`) or a jump in a check's failing rows
+    (`--metric failing_rows --check not_null --column email`). Choose `--method
+    zscore` (mean/std) or `mad` (robust to past outliers)."""
     store = _open_store(store_url)
-    history = [rows for _ts, rows in store.row_count_history(suite, dataset=dataset)]
-    verdict = volume_anomaly(history, sigma=sigma)
+    try:
+        pairs = store.metric_history(
+            suite, metric=metric, check=check, column=column, dataset=dataset
+        )
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+    verdict = detect_anomaly([v for _ts, v in pairs], sigma=sigma, method=method)
+    label = metric if metric == "rows" else f"{metric}({check}{':' + column if column else ''})"
 
     if as_json:
-        console.print_json(json.dumps(verdict))
+        console.print_json(json.dumps({**verdict, "metric": label}))
     elif verdict["status"] == "insufficient_history":
         console.print(
-            f"[yellow]not enough history[/]: have {verdict['have']} run(s), "
+            f"[yellow]not enough history[/] for {label}: have {verdict['have']} run(s), "
             f"need {verdict['need']} to establish a baseline."
         )
     elif verdict["anomaly"]:
         console.print(
-            f"[red]VOLUME ANOMALY[/]: current={verdict['current']} rows vs "
-            f"baseline mean={verdict['baseline_mean']} (std={verdict['baseline_std']}, "
-            f"z={verdict['zscore']}, sigma={sigma})"
+            f"[red]ANOMALY[/] in {label}: current={verdict['current']} vs "
+            f"baseline center={verdict['center']} (spread={verdict['spread']}, "
+            f"score={verdict['score']}, method={method}, sigma={sigma})"
         )
     else:
         console.print(
-            f"[green]OK[/]: current={verdict['current']} rows within "
-            f"{sigma}σ of baseline mean={verdict['baseline_mean']}."
+            f"[green]OK[/]: {label} current={verdict['current']} within "
+            f"{sigma} {method}-deviations of baseline center={verdict['center']}."
         )
     sys.exit(1 if verdict.get("anomaly") else 0)
 

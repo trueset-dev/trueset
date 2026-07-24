@@ -170,3 +170,45 @@ class ResultStore:
         with self.engine.connect() as conn:
             rows = [(r[0], int(r[1])) for r in conn.execute(stmt)]
         return list(reversed(rows))
+
+    def metric_history(
+        self,
+        suite: str,
+        *,
+        metric: str = "rows",
+        check: str | None = None,
+        column: str | None = None,
+        dataset: str | None = None,
+        limit: int = 100,
+    ) -> list[tuple[str, float]]:
+        """(timestamp, value) oldest->newest for a numeric metric across runs.
+
+        `metric="rows"` trends the dataset row volume. Otherwise `metric` is a
+        per-check numeric column (`failing_rows` or `total_rows`) and `check`
+        (optionally `column`) selects which check to trend -- e.g. the failing-row
+        count of a specific not_null check over time. This lets monitoring watch
+        any metric, not just volume, with no schema changes.
+        """
+        if metric == "rows":
+            return [(ts, float(v)) for ts, v in
+                    self.row_count_history(suite, dataset=dataset, limit=limit)]
+        if metric not in ("failing_rows", "total_rows"):
+            raise ValueError("metric must be 'rows', 'failing_rows', or 'total_rows'")
+        if check is None:
+            raise ValueError("check=... is required for per-check metrics")
+
+        col = RESULTS.c.failing_rows if metric == "failing_rows" else RESULTS.c.total_rows
+        stmt = (
+            select(RUNS.c.ts, col)
+            .select_from(RESULTS.join(RUNS, RESULTS.c.run_id == RUNS.c.run_id))
+            .where(RUNS.c.suite == suite, RESULTS.c.check == check, col.is_not(None))
+            .order_by(desc(RUNS.c.ts))
+            .limit(limit)
+        )
+        if column is not None:
+            stmt = stmt.where(RESULTS.c.column == column)
+        if dataset is not None:
+            stmt = stmt.where(RUNS.c.dataset == dataset)
+        with self.engine.connect() as conn:
+            rows = [(r[0], float(r[1])) for r in conn.execute(stmt)]
+        return list(reversed(rows))

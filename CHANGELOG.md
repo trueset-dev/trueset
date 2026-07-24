@@ -7,6 +7,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **Generalized anomaly detection.** `trueset monitor` can now trend *any* metric,
+  not just row volume: `--metric rows|failing_rows|total_rows` with `--check`/
+  `--column` to watch a specific check's failing-row trend. Two deterministic
+  detectors via `--method`: `zscore` (mean/std) and `mad` (median-absolute-
+  deviation, robust to past outliers). `ResultStore.metric_history()` reads any
+  metric from existing history — no schema change.
 - **dbt interop.** `trueset import-dbt --schema schema.yml [--model X]` converts
   dbt column tests into a runnable trueset suite: `not_null`/`unique` map
   directly, `accepted_values`→`in_set`, `relationships`→`referential_integrity`;

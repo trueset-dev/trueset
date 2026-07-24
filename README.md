@@ -274,9 +274,17 @@ trueset monitor --store "postgresql://…/trueset_history" --suite orders_qualit
     column: created_at
     max_age_hours: 6        # fail if the table hasn't updated in 6 hours
   ```
-- **`trueset monitor`** compares the latest run's row count to the baseline of
-  past runs and exits non-zero on a >`sigma`-σ anomaly (a silent 90% drop in
-  rows is caught even when every row that *is* there passes every check).
+- **`trueset monitor`** trends any metric against the baseline of past runs and
+  exits non-zero on a >`sigma` anomaly — a silent 90% drop in rows is caught even
+  when every row that *is* there passes every check:
+  ```bash
+  trueset monitor --store "$H" --suite orders --metric rows --method mad
+  trueset monitor --store "$H" --suite orders --metric failing_rows --check not_null --column email
+  ```
+  `--metric` can be `rows`, `failing_rows`, or `total_rows` (with `--check`/
+  `--column` to pick a check); `--method` is `zscore` (mean/std) or `mad`
+  (median-absolute-deviation — robust when a few past runs were themselves
+  outliers). Detection is deterministic and explainable — never a black box.
 
 ## Works with your stack (dbt today)
 
