@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-25
+
 ### Added
 - **Ambiguity-aware validation (commodities-grade).** For data where an extreme
   value is often the *truth*, not an error. Five capabilities, all deterministic:
@@ -35,86 +37,72 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   data passes) and a row-count volume band, all as `warn` for you to review and
   commit — never auto-enforced. Off by default; the plain `suggest` output is
   unchanged. The profiler now records `numeric_p01`/`numeric_p99`. Note:
-  calibration learns from the sample, so run it on known-good/representative
-  data. (First layer of the roadmap's auto-thresholds; history- and
-  segment-calibrated thresholds are next.)
-- **Real-Postgres parity, verified.** The "runs on any warehouse" claim is now
-  proven against an actual Postgres 16 (not just SQLite): a `tests/test_postgres.py`
-  parity suite (skipped unless `TRUESET_PG_URL` is set) and a CI job that runs it
-  against a Postgres service container — exercising the dialect-specific paths
-  (`~` regex operator, casts, window functions).
-- **Failing-row extraction + quarantine.** Checks expose a per-row `failure_spec()`
-  and backends implement `failing_rows(spec, limit)` (pandas/DuckDB/SQLAlchemy,
-  proven identical). `trueset.split(df, suite)` partitions a batch into clean and
-  quarantined rows with per-row reasons (`bad_annotated()` adds a
-  `_trueset_reasons` column) — for dead-letter / quarantine routing at ingestion.
-  Only `error`-severity checks divert rows by default (`include_warnings=True` to
-  opt in). `trueset run --data … --quarantine bad.csv` writes failing rows to CSV.
-  trueset still only *identifies* the bad rows; the pipeline routes them.
-- **`metric` check** — validate an aggregate (sum/avg/min/max/count) `equals` a
-  target within `tolerance`, or falls in a `min`/`max` range. For metrics/report
-  validation ("total revenue ≈ X", "avg order value in [10, 100]"). Runs as a
-  pushed-down aggregate via a new `aggregate` protocol primitive, proven
-  identical across pandas/DuckDB/SQLAlchemy.
-- **Generalized anomaly detection.** `trueset monitor` can now trend *any* metric,
-  not just row volume: `--metric rows|failing_rows|total_rows` with `--check`/
-  `--column` to watch a specific check's failing-row trend. Two deterministic
-  detectors via `--method`: `zscore` (mean/std) and `mad` (median-absolute-
-  deviation, robust to past outliers). `ResultStore.metric_history()` reads any
-  metric from existing history — no schema change.
-- **dbt interop.** `trueset import-dbt --schema schema.yml [--model X]` converts
-  dbt column tests into a runnable trueset suite: `not_null`/`unique` map
-  directly, `accepted_values`→`in_set`, `relationships`→`referential_integrity`;
-  dbt test severity is preserved; both `tests:` and `data_tests:` keys and dbt
-  `sources` are supported. Unmappable/custom dbt tests are reported (not silently
-  dropped) and every produced check is validated through `build_check`. Adopt
-  trueset without rewriting your existing tests.
-- **Data classification.** The profiler now infers a suggested `sensitivity`
-  (pii/pci) for high-precision patterns — email, phone, US SSN, credit card
-  (length + Luhn, incl. bare-integer columns), IBAN. `trueset profile` shows a
-  sensitivity column and `trueset suggest` pre-tags the drafted checks. These are
-  *suggestions for human review* — trueset never auto-applies a classification.
-- **Monitoring.** New `freshness` check — the newest value in a timestamp column
-  must be within `max_age_hours` of now (catches stale pipelines); runs on every
-  backend via a new `max_value` protocol primitive, proven identical across
-  pandas/DuckDB/SQLAlchemy. New `trueset monitor` command + `volume_anomaly()`
-  flag a sudden drop/spike in row volume vs the baseline of past runs (reads the
-  results store), exiting non-zero on an anomaly for CI.
-- **Results-history persistence** (`ResultStore`, needs `[sql]`). Persist every
-  run to any SQLAlchemy database (SQLite → Postgres/Snowflake) as an auditable
-  trail: `trueset run … --save <url>` and `trueset history --store <url>`. Two
-  tables (`trueset_runs`, `trueset_results`) keep run verdicts, counts, row
-  volume, and full per-check evidence (observed + governance metadata).
-- **Governance layer** (additive, non-breaking). Any check may carry optional
-  `owner` / `sensitivity` / `regulation` / `tags` / `description`. `split_meta`
-  separates these from check kwargs in `build_check`, they ride onto every
-  `CheckResult`, and serialize into JSON evidence when set. New `trueset report
-  --by {sensitivity|owner|regulation}` groups pass/fail by policy dimension and
-  flags failing checks on sensitive (pii/pci/phi/confidential) data. Sensitivity
-  is validated against `public<internal<confidential<pii<pci<phi`.
+  calibration learns from the sample, so run it on known-good/representative data.
+
+### Fixed
+- `trueset.__version__` is now derived from the installed package metadata rather
+  than a hardcoded string (it had drifted to `0.0.1` while packaging said 0.1.0),
+  so the two can never disagree again.
+
+## [0.1.0] - 2026-07-24
+
+First public release — `pip install trueset`.
+
+### Added
+- **Core engine.** Portable `Backend` protocol (write a check once, run on any
+  engine), single-source checks, `Suite`/`SuiteResult`, `warn`/`error` severities
+  → exit codes, deterministic JSON-serializable results. pandas + DuckDB backends,
+  proven identical. AI copilot (check *authoring* only, gated through
+  `build_check`), deterministic profiler + `suggest`, and the CLI.
 - **`SQLAlchemyBackend`** — one class turns any SQLAlchemy-supported database
   (Postgres, MySQL/MariaDB, SQLite, Snowflake, BigQuery, Redshift, …) into a
   first-class engine. Every check is pushed down as `SELECT count(*) … WHERE …`
   so full tables never leave the warehouse. Dialect-aware regex handling;
   proven identical to pandas via a cross-engine parity test (`test_sqlalchemy.py`).
-- CLI can now validate a live SQL table: `trueset run --url <sqlalchemy-url>
+- CLI can validate a live SQL table: `trueset run --url <sqlalchemy-url>
   --table <name> --checks <yml>`. `reconcile` accepts SQL for both the primary
-  (`--url/--table`) and references (`--ref name=<url>::<table>`), so you can
-  reconcile a warehouse against a source database directly.
-- `py.typed` marker so downstream projects get type information when they import trueset.
-- GitHub composite Action (`action.yml`) — add data-quality gates to any CI in a few lines.
-- Packaging metadata: project URLs, trove classifiers, expanded keywords.
-- `SuiteLoadError` with actionable messages; the CLI now reports bad YAML, missing
-  files, and invalid check specs cleanly instead of raising a traceback.
+  (`--url/--table`) and references (`--ref name=<url>::<table>`).
+- **Real-Postgres parity, verified.** The "runs on any warehouse" claim is proven
+  against an actual Postgres 16 (not just SQLite): a `tests/test_postgres.py`
+  parity suite (skipped unless `TRUESET_PG_URL` is set) and a CI job against a
+  Postgres service container — exercising the dialect-specific paths (`~` regex
+  operator, casts, window functions).
+- **Failing-row extraction + quarantine.** Checks expose a per-row `failure_spec()`
+  and backends implement `failing_rows(spec, limit)` (pandas/DuckDB/SQLAlchemy,
+  proven identical). `trueset.split(df, suite)` partitions a batch into clean and
+  quarantined rows with per-row reasons (`bad_annotated()` adds a
+  `_trueset_reasons` column). `trueset run … --quarantine bad.csv` writes failing
+  rows to CSV. trueset still only *identifies*; the pipeline routes.
+- **`metric` check** — validate an aggregate (sum/avg/min/max/count) `equals` a
+  target within `tolerance`, or falls in a `min`/`max` range. Runs as a
+  pushed-down aggregate via a new `aggregate` protocol primitive, proven identical
+  across pandas/DuckDB/SQLAlchemy.
+- **Monitoring.** New `freshness` check (newest timestamp within `max_age_hours`,
+  via a new `max_value` primitive). New `trueset monitor` command + generalized
+  anomaly detection: trend *any* metric (`--metric rows|failing_rows|total_rows`,
+  `--check`/`--column`) with `zscore` or robust `mad` detectors over run history.
+- **Results-history persistence** (`ResultStore`, needs `[sql]`). Persist every
+  run to any SQLAlchemy database as an auditable trail: `trueset run … --save
+  <url>` and `trueset history --store <url>`.
+- **Governance layer** (additive). Any check may carry `owner` / `sensitivity` /
+  `regulation` / `tags` / `description`; `split_meta` separates these in
+  `build_check`, they ride onto every `CheckResult` and serialize into evidence.
+  New `trueset report --by {sensitivity|owner|regulation}`.
+- **Data classification.** The profiler infers a suggested `sensitivity` (pii/pci)
+  for high-precision patterns — email, phone, US SSN, credit card (Luhn), IBAN —
+  and `suggest` pre-tags drafted checks. Suggestions for human review; never
+  auto-applied.
+- **dbt interop.** `trueset import-dbt --schema schema.yml [--model X]` converts
+  dbt column tests into a runnable trueset suite (`accepted_values`→`in_set`,
+  `relationships`→`referential_integrity`, severity preserved). Unmappable tests
+  are reported, not silently dropped.
+- `py.typed` marker; GitHub composite Action (`action.yml`); packaging metadata
+  (project URLs, trove classifiers, keywords); `SuiteLoadError` with actionable
+  messages so the CLI reports bad YAML / missing files / invalid specs cleanly.
 
 ### Changed
 - `value_parity` now detects and reports **duplicate keys** on either side. A
   repeated join key previously collapsed silently (last-write-wins); it is now
   surfaced in `observed` (`duplicate_keys_primary` / `duplicate_keys_reference`)
-  and counted as a failure, because an ambiguous join is a reconciliation defect.
-- `value_parity` reports a clean, itemized message listing only the failure modes
-  that actually occurred.
-
-## [0.1.0]
-First tagged pre-release. Core engine, 8 single-source checks, 3 reconciliation
-checks, pandas + DuckDB backends (proven identical), AI copilot, profiler, CLI.
+  and counted as a failure, and the message is itemized to the failure modes that
+  actually occurred.
