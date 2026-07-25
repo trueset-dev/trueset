@@ -14,15 +14,14 @@ theme:
     text: IBM Plex Sans
     code: IBM Plex Mono
   palette:
-    - media: "(prefers-color-scheme: light)"
-      scheme: default
+    # light is the default, to match the (always-light) landing page
+    - scheme: default
       primary: teal
       accent: teal
       toggle:
         icon: material/weather-night
         name: Switch to dark mode
-    - media: "(prefers-color-scheme: dark)"
-      scheme: slate
+    - scheme: slate
       primary: teal
       accent: teal
       toggle:
@@ -35,6 +34,10 @@ theme:
     - content.code.copy
     - toc.follow
     - search.suggest
+
+extra:
+  # clicking the logo / title in the docs header returns to the landing page
+  homepage: https://trueset-dev.github.io/trueset/
 
 extra_css:
   - stylesheets/brand.css
