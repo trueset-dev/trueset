@@ -1,0 +1,14 @@
+<svg width="52" height="52" viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="trueset">
+  <defs>
+    <clipPath id="setA">
+      <rect x="6" y="14" width="24" height="24" rx="6.5"/>
+    </clipPath>
+  </defs>
+  <!-- the shared "true set": intersection of the two data tiles -->
+  <g clip-path="url(#setA)">
+    <rect x="22" y="14" width="24" height="24" rx="6.5" fill="#0F766E"/>
+  </g>
+  <!-- the two source datasets -->
+  <rect x="6" y="14" width="24" height="24" rx="6.5" fill="none" stroke="#14181B" stroke-width="2.6"/>
+  <rect x="22" y="14" width="24" height="24" rx="6.5" fill="none" stroke="#14181B" stroke-width="2.6"/>
+</svg>

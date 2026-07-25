@@ -1,0 +1,16 @@
+<svg width="196" height="52" viewBox="0 0 196 52" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="trueset">
+  <defs>
+    <clipPath id="setA2">
+      <rect x="4" y="14" width="24" height="24" rx="6.5"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#setA2)">
+    <rect x="20" y="14" width="24" height="24" rx="6.5" fill="#0F766E"/>
+  </g>
+  <rect x="4" y="14" width="24" height="24" rx="6.5" fill="none" stroke="#14181B" stroke-width="2.6"/>
+  <rect x="20" y="14" width="24" height="24" rx="6.5" fill="none" stroke="#14181B" stroke-width="2.6"/>
+  <!-- Wordmark. For print, outline this text to paths (font: IBM Plex Sans). -->
+  <text x="60" y="34" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="27" font-weight="600" letter-spacing="-0.5">
+    <tspan fill="#14181B">true</tspan><tspan fill="#0F766E">set</tspan>
+  </text>
+</svg>
