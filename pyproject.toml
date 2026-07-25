@@ -37,7 +37,8 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/trueset-dev/trueset"
+Homepage = "https://trueset-dev.github.io/trueset/"
+Documentation = "https://trueset-dev.github.io/trueset/"
 Repository = "https://github.com/trueset-dev/trueset"
 Issues = "https://github.com/trueset-dev/trueset/issues"
 Changelog = "https://github.com/trueset-dev/trueset/blob/main/CHANGELOG.md"

@@ -8,18 +8,23 @@ copyright: Apache-2.0
 
 theme:
   name: material
+  favicon: assets/trueset-mark.svg
+  logo: assets/trueset-mark-white.svg
+  font:
+    text: IBM Plex Sans
+    code: IBM Plex Mono
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: deep purple
-      accent: deep purple
+      primary: teal
+      accent: teal
       toggle:
         icon: material/weather-night
         name: Switch to dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: deep purple
-      accent: deep purple
+      primary: teal
+      accent: teal
       toggle:
         icon: material/weather-sunny
         name: Switch to light mode
@@ -31,7 +36,12 @@ theme:
     - toc.follow
     - search.suggest
 
+extra_css:
+  - stylesheets/brand.css
+
 markdown_extensions:
+  - attr_list
+  - md_in_html
   - admonition
   - pymdownx.details
   - pymdownx.superfences
