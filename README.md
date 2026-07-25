@@ -136,10 +136,17 @@ Draft a check suite instead of writing one by hand:
 ```bash
 trueset profile  --data orders.csv                 # stats + inferred semantic types
 trueset suggest  --data orders.csv                 # deterministic draft suite (no AI)
+trueset suggest  --data orders.csv --calibrate     # + data-derived ranges & volume band
 trueset suggest  --data orders.csv --ai --out checks.yml           # AI copilot
 trueset suggest  --data orders.csv --describe "amount can't be negative; \
     status is one of pending/shipped/delivered/cancelled"        # English -> checks
 ```
+
+**Auto-calibrated thresholds** (`--calibrate`): rather than hand-picking limits,
+trueset derives numeric `in_range` bounds (from the 1st/99th percentiles) and a
+row-count volume band straight from your data — emitted as `warn` for you to
+review and commit, never auto-enforced. Run it on known-good data: calibration
+learns from the sample, so representative input in means sensible thresholds out.
 
 **The trust rule that makes AI safe here:** the copilot only ever *authors*
 checks. Every spec it returns — from profiling or natural language — is passed

@@ -7,6 +7,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **Auto-calibrated thresholds (`suggest --calibrate`).** Stop hand-picking
+  numbers: for numeric columns, `suggest` now proposes data-derived `in_range`
+  bounds (from the 1st/99th percentiles, widened to clean integers so current
+  data passes) and a row-count volume band, all as `warn` for you to review and
+  commit — never auto-enforced. Off by default; the plain `suggest` output is
+  unchanged. The profiler now records `numeric_p01`/`numeric_p99`. Note:
+  calibration learns from the sample, so run it on known-good/representative
+  data. (First layer of the roadmap's auto-thresholds; history- and
+  segment-calibrated thresholds are next.)
 - **Real-Postgres parity, verified.** The "runs on any warehouse" claim is now
   proven against an actual Postgres 16 (not just SQLite): a `tests/test_postgres.py`
   parity suite (skipped unless `TRUESET_PG_URL` is set) and a CI job that runs it

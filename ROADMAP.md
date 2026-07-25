@@ -41,8 +41,12 @@ Nothing here is a promise; it's a living list we triage as real users test.
 
 ## 🔜 Next up (near-term, roughly ordered)
 
-1. **Auto-calibrated thresholds** — stop making users hand-tune limits. See
-   [Idea inbox](#idea-inbox); this is the top candidate.
+1. **Auto-calibrated thresholds** — stop making users hand-tune limits.
+   - ✅ *Layer 1 (from a data sample):* `suggest --calibrate` proposes numeric
+     `in_range` bounds (percentile-based) + a row-count volume band, as `warn`.
+   - ⬜ *Layer 2 (from run history):* learn "normal" bands and auto-set anomaly
+     thresholds so monitoring sets itself up.
+   - ⬜ *Layer 3 (per-segment):* different thresholds per partition/scenario.
 2. **AI failure diagnosis** — explain *why* a check failed (root-cause hints on
    top of the deterministic result), building on run history. AI explains; it
    never decides pass/fail.

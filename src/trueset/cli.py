@@ -327,7 +327,14 @@ def report(
 @click.option("--out", "out_path", default=None, help="Write draft suite to this YAML.")
 @click.option("--ai", is_flag=True, help="Use the AI copilot (needs ANTHROPIC_API_KEY).")
 @click.option("--describe", default=None, help="Plain-English intent (implies --ai).")
-def suggest(data: str, out_path: str | None, ai: bool, describe: str | None) -> None:
+@click.option(
+    "--calibrate",
+    is_flag=True,
+    help="Auto-derive numeric ranges + a volume band from the data (as warn, to review).",
+)
+def suggest(
+    data: str, out_path: str | None, ai: bool, describe: str | None, calibrate: bool
+) -> None:
     """Draft a check suite from your data (deterministic, or AI-assisted).
 
     Whatever the source, every proposed check is validated against the
@@ -352,7 +359,7 @@ def suggest(data: str, out_path: str | None, ai: bool, describe: str | None) -> 
         else:
             suite = checks_from_profile(profile_dataframe(df), complete)
     else:
-        suite = suggest_from_profile(profile_dataframe(df))
+        suite = suggest_from_profile(profile_dataframe(df), calibrate=calibrate)
 
     text = _yaml.safe_dump(suite, sort_keys=False)
     if out_path:

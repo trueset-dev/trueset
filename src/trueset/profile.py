@@ -16,6 +16,7 @@ un-auditable ever reaches your data.
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import asdict, dataclass, field
 from typing import Any
@@ -93,6 +94,9 @@ class ColumnProfile:
     inferred: str
     numeric_min: float | None = None
     numeric_max: float | None = None
+    #: 1st/99th percentiles -- outlier-robust bounds used by calibrated suggestion.
+    numeric_p01: float | None = None
+    numeric_p99: float | None = None
     categories: list[Any] | None = None
     samples: list[Any] = field(default_factory=list)
     #: SUGGESTED classification (pii/pci) from the semantic type; None if unknown.
@@ -173,10 +177,12 @@ def profile_dataframe(df: pd.DataFrame) -> DatasetProfile:
         distinct = int(s.nunique(dropna=True))
         inferred = _infer_semantic(s)
 
-        nmin = nmax = None
+        nmin = nmax = np01 = np99 = None
         if pd.api.types.is_numeric_dtype(s) and s.notna().any():
             nmin = float(s.min())
             nmax = float(s.max())
+            np01 = float(s.quantile(0.01))
+            np99 = float(s.quantile(0.99))
 
         categories = None
         if inferred == "categorical":
@@ -194,6 +200,8 @@ def profile_dataframe(df: pd.DataFrame) -> DatasetProfile:
                 inferred=inferred,
                 numeric_min=nmin,
                 numeric_max=nmax,
+                numeric_p01=np01,
+                numeric_p99=np99,
                 categories=categories,
                 samples=[_jsonable(v) for v in s.dropna().head(3).tolist()],
                 sensitivity=SENSITIVITY_BY_SEMANTIC.get(inferred),
@@ -202,13 +210,53 @@ def profile_dataframe(df: pd.DataFrame) -> DatasetProfile:
     return DatasetProfile(rows=rows, columns=cols)
 
 
+def _nice_bounds(lo: float, hi: float) -> tuple[int, int]:
+    """Widen [lo, hi] to clean integer bounds that still contain the data.
+
+    floor(lo)/ceil(hi) guarantees the suggested range never fails on the very
+    sample it was derived from -- a calibrated check the user can commit as-is.
+    """
+    return (math.floor(lo), math.ceil(hi))
+
+
+def _calibrated_range(c: ColumnProfile) -> dict[str, Any] | None:
+    """A data-derived in_range for a numeric column, or None.
+
+    Bounds come from the 1st/99th percentiles (outlier-robust), then widened to
+    clean integers so current data passes. Emitted as `warn` -- a proposal to
+    review and tighten, never a hard gate the user didn't choose.
+    """
+    if c.numeric_p01 is None or c.numeric_p99 is None:
+        return None
+    lo, hi = _nice_bounds(min(c.numeric_p01, c.numeric_min or c.numeric_p01),
+                          max(c.numeric_p99, c.numeric_max or c.numeric_p99))
+    check: dict[str, Any] = {"type": "in_range", "column": c.name, "severity": "warn"}
+    # keep a non-negative column's floor at 0 rather than a spuriously negative one
+    check["min"] = max(0, lo) if (c.numeric_min or 0) >= 0 else lo
+    check["max"] = hi
+    return check
+
+
 def suggest_from_profile(
-    profile: DatasetProfile, suite_name: str = "suggested_suite"
+    profile: DatasetProfile,
+    suite_name: str = "suggested_suite",
+    calibrate: bool = False,
 ) -> dict[str, Any]:
-    """Deterministic, rule-based draft suite. No AI. Always safe to review."""
+    """Deterministic, rule-based draft suite. No AI. Always safe to review.
+
+    With `calibrate=True`, numeric columns get data-derived `in_range` bounds
+    (from percentiles) and the row count gets an observed-volume band -- both as
+    `warn`. This saves you hand-picking numbers; you still review and commit.
+    """
+    if calibrate:
+        n = profile.rows
+        row_check = {"type": "row_count", "min": max(1, n // 2), "max": max(1, n * 2),
+                     "severity": "warn"}
+    else:
+        row_check = {"type": "row_count", "min": 1}
     checks: list[dict[str, Any]] = [
         {"type": "columns_exist", "columns": [c.name for c in profile.columns]},
-        {"type": "row_count", "min": 1},
+        row_check,
     ]
     for c in profile.columns:
         col_checks: list[dict[str, Any]] = []
@@ -218,8 +266,11 @@ def suggest_from_profile(
             col_checks.append({"type": "unique", "column": c.name})
         if c.inferred == "categorical" and c.categories:
             col_checks.append({"type": "in_set", "column": c.name, "values": c.categories})
-        if c.inferred == "numeric" and c.numeric_min is not None and c.numeric_min >= 0:
-            col_checks.append({"type": "in_range", "column": c.name, "min": 0})
+        if c.inferred == "numeric":
+            if calibrate and (cal := _calibrated_range(c)) is not None:
+                col_checks.append(cal)
+            elif c.numeric_min is not None and c.numeric_min >= 0:
+                col_checks.append({"type": "in_range", "column": c.name, "min": 0})
         if c.inferred == "email":
             col_checks.append(
                 {
