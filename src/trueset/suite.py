@@ -11,6 +11,7 @@ from typing import Any
 
 import yaml
 
+from . import ambiguity  # noqa: F401  (registers the corroboration check)
 from .backends.base import Backend
 from .checks import Check, build_check
 from .reconcile import ReconciliationCheck  # noqa: F401  (import also registers recon checks)

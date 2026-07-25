@@ -339,6 +339,43 @@ trueset monitor --store "postgresql://…/trueset_history" --suite orders_qualit
   (median-absolute-deviation — robust when a few past runs were themselves
   outliers). Detection is deterministic and explainable — never a black box.
 
+## Handling ambiguity (when the extreme value is the *truth*)
+
+The hardest real-world data problem — especially in commodities, markets, and
+sensors: an extreme value is often *correct* (a cold-snap demand spike, a
+geopolitical event, a COVID price move), not an error, and the same statistical
+signal can be either. You can't threshold your way out of that. trueset's job is
+to **surface and quantify** the ambiguity, not pretend to resolve it.
+
+- **Corroboration** — judge a suspicious value against *supporting signals*, not
+  in isolation. A real price spike shows up in volume too; a silent bad tick
+  doesn't:
+  ```yaml
+  - type: corroboration
+    column: price
+    corroborate_with: [volume]   # trust the spike only if volume backs it
+    severity: warn               # surface it — real extremes happen, don't block
+  ```
+- **Annotate-and-flow** — instead of blocking rows, score them and let them pass
+  with metadata (market data needs a *full view*):
+  ```python
+  from trueset import annotate
+  scored = annotate(df, suite, key="day")   # adds _trueset_quality (0..1) + _trueset_flags
+  ```
+- **Adjudication** — when a human rules a flag "actually valid," record it so it's
+  never re-flagged (the feedback loop that kills repeat false positives):
+  ```python
+  from trueset import Adjudications
+  adj = Adjudications(); adj.mark_valid("in_range(price)", "2026-03-09")
+  annotate(df, suite, key="day", adjudications=adj)   # suppressed going forward
+  ```
+- **Context-aware ranges** — one expected band *per segment* (region/season), via
+  `segment_bounds(df, "price", "region")`, so a legitimate regime isn't judged by
+  another's. All of it rests on robust statistics (`stats.robust_z` / MAD).
+
+Runnable: [`examples/ambiguity_demo.py`](examples/ambiguity_demo.py). (In-memory
+today; warehouse pushdown is on the [roadmap](ROADMAP.md).)
+
 ## Works with your stack (dbt today)
 
 trueset composes with the tools you already run — it doesn't replace them. If you

@@ -91,20 +91,21 @@ The hardest real-world data problem: when an extreme value is *usually the truth
 (a geopolitical event, a cold-snap demand spike, a COVID price move), not an
 error — and the same statistical signal can be either. You can't resolve this
 with a fixed threshold. trueset's job is to *surface and quantify* the ambiguity
-well, not pretend to eliminate it. Building blocks:
-- **Corroboration checks** — validate a value against *supporting signals*, not
-  in isolation ("does volume support this price move? do 2+ sources agree?").
-  Direct extension of the reconciliation wedge (cross-source agreement).
-- **Confidence score, not binary block** — annotate-and-flow: attach a quality
-  score / flags to rows and let them pass with metadata (market data often can't
-  be blocked; you need a full view). Generalizes `warn` + quarantine reasons.
-- **Context/regime-aware expected ranges** — thresholds conditioned on external
-  context (season, weather, regime) so a legitimate seasonal spike isn't flagged.
-  (Extends per-segment calibration, Layer 3.)
-- **Statistical basis for thresholds** — history + robust stats (MAD, not just σ)
-  so every threshold has a defensible derivation, not a hand-picked number.
-- **Adjudication feedback loop** — when a human rules a flag "actually valid,"
-  that verdict becomes a label that recalibrates, cutting future false positives.
+well, not pretend to eliminate it. **v1 of all five shipped (pandas); warehouse
+pushdown is the follow-up.**
+- ✅ **Corroboration checks** — `corroboration` check + `corroboration_flags()`:
+  validate a value against *supporting signals* ("does volume support this price
+  move? do 2+ sources agree?"). Kin to the reconciliation wedge.
+- ✅ **Confidence score, not binary block** — `annotate()` attaches a quality
+  score + flags and lets rows flow with metadata (a full view, not a hard gate).
+- ✅ **Context/regime-aware expected ranges** — `segment_bounds()` derives a band
+  per segment (region/season/regime) so a legitimate seasonal spike isn't flagged.
+- ✅ **Statistical basis for thresholds** — `stats.py` robust z-score / MAD (with
+  a flat-baseline fallback): defensible derivation, not a hand-picked number.
+- ✅ **Adjudication feedback loop** — `Adjudications` records human "valid"
+  verdicts (auditable JSON) so future runs stop re-flagging them.
+- ⬜ *Follow-ups:* warehouse pushdown for these; cross-source corroboration
+  (a second dataset, not just a sibling column); history-driven recalibration.
 
 *Origin: decoded from a commodities data-quality interview — the class of problem
 worth being world-class at.*

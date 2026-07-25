@@ -31,6 +31,22 @@ def _label(check) -> str:
     return f"{check.type}({column})" if column else check.type
 
 
+def _row_mask(check, be, df) -> pd.Series | None:
+    """The per-row failing mask for a check, or None if it has no per-row notion.
+
+    Prefers the simple `failure_spec()` predicate (works on any backend); falls
+    back to a check's own `pandas_row_mask(df)` for analytical checks like
+    corroboration that can't be expressed as a single predicate.
+    """
+    spec = check.failure_spec()
+    if spec is not None:
+        return be.failing_mask(spec)
+    fn = getattr(check, "pandas_row_mask", None)
+    if fn is not None:
+        return fn(df)
+    return None
+
+
 @dataclass
 class Split:
     """The result of partitioning a DataFrame against a suite's row-wise checks."""
@@ -80,13 +96,12 @@ def split(df: pd.DataFrame, suite, include_warnings: bool = False) -> Split:
     for check in suite.checks:
         if check.severity is Severity.WARN and not include_warnings:
             continue  # a warning surfaces the issue but doesn't divert the row
-        spec = check.failure_spec()
-        if spec is None:
-            continue  # dataset-level or cross-system check: no per-row failures
         try:
-            mask = be.failing_mask(spec)
+            mask = _row_mask(check, be, df)
         except (KeyError, ValueError):
             continue  # e.g. missing column -- surfaced as an ERROR by evaluate()
+        if mask is None:
+            continue  # dataset-level or cross-system check: no per-row failures
         label = _label(check)
         for idx in df.index[mask]:
             reasons.setdefault(idx, []).append(label)

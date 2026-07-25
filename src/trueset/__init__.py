@@ -24,6 +24,13 @@ try:  # optional -- results-history persistence (needs sqlalchemy)
     from .history import ResultStore
 except Exception:  # pragma: no cover
     ResultStore = None  # type: ignore
+from .ambiguity import (
+    Adjudications,
+    CorroborationResult,
+    annotate,
+    corroboration_flags,
+    segment_bounds,
+)
 from .profile import DatasetProfile, profile_dataframe, suggest_from_profile
 from .quarantine import Split, split
 from .reconcile import (
@@ -32,6 +39,7 @@ from .reconcile import (
     RowCountParity,
     ValueParity,
 )
+from .stats import mad, robust_bounds, robust_z
 
 try:
     from importlib.metadata import version as _pkg_version
@@ -60,6 +68,14 @@ __all__ = [
     "detect_anomaly",
     "split",
     "Split",
+    "annotate",
+    "corroboration_flags",
+    "CorroborationResult",
+    "Adjudications",
+    "segment_bounds",
+    "robust_z",
+    "robust_bounds",
+    "mad",
     "validate_dataframe",
     "profile_dataframe",
     "suggest_from_profile",

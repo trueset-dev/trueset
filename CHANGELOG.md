@@ -7,6 +7,28 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **Ambiguity-aware validation (commodities-grade).** For data where an extreme
+  value is often the *truth*, not an error. Five capabilities, all deterministic:
+  - **Corroboration** — a new `corroboration` check + `corroboration_flags()`:
+    judge a suspicious value against *supporting signals* (does volume back the
+    price spike? does a second source agree?), not in isolation. A real spike is
+    corroborated and passes; a lone spike (the silent error) is surfaced.
+  - **Annotate-and-flow** — `annotate(df, suite)` attaches a `_trueset_quality`
+    score (0..1) and `_trueset_flags` to every row and lets them *flow* instead
+    of blocking (market data needs a full view). Errors cost more than warnings.
+  - **Adjudications** — `Adjudications` records human "actually valid" verdicts
+    (auditable JSON) so future runs stop re-flagging them: the feedback loop that
+    kills repeat false positives.
+  - **Context-aware ranges** — `segment_bounds()` derives expected bands *per
+    segment* (region/regime/season) so a legitimate seasonal spike isn't judged
+    by a global threshold.
+  - **Robust statistics** — `stats.py` (robust z-score / MAD, with a mean-AD
+    fallback for flat-baseline spikes) gives thresholds a defensible statistical
+    basis instead of a hand-picked number.
+
+  Analytical checks now expose an optional `pandas_row_mask(df)` so corroboration
+  participates in `annotate()`/`split()`. In-memory (pandas) for now; warehouse
+  pushdown is on the roadmap. See `examples/ambiguity_demo.py`.
 - **Auto-calibrated thresholds (`suggest --calibrate`).** Stop hand-picking
   numbers: for numeric columns, `suggest` now proposes data-derived `in_range`
   bounds (from the 1st/99th percentiles, widened to clean integers so current
