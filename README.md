@@ -378,12 +378,11 @@ never leaves the warehouse.
 
 ## Roadmap
 
-- [x] **Backends**: pandas, DuckDB, and SQLAlchemy (any warehouse).
-- [ ] **Governance**: `owner`/`sensitivity`/`regulation` metadata + policy reports.
-- [ ] **Results sink**: write run history to a table for trend/anomaly monitoring.
-- [ ] **Freshness & volume** checks for pipeline monitoring.
-- [ ] **Interop**: import dbt tests + Great Expectations / Soda suites.
-- [ ] **Backends**: PySpark.
+See **[ROADMAP.md](ROADMAP.md)** for what's shipped, what's next, and the idea
+inbox. Governance, results history, freshness/volume monitoring, and dbt import
+all shipped in v0.1.0; auto-calibrated thresholds and AI failure diagnosis are
+next. Have an idea? Drop it in the roadmap's idea inbox or open a
+[feature request](../../issues/new?template=feature_request.md).
 
 ## Development
 
