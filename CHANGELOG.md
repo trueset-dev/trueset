@@ -7,6 +7,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **Cross-source corroboration** — a new `source_corroboration` check (+
+  `source_corroboration_flags()`) that answers *"do 2+ sources agree?"*. For each
+  outlier in the primary, it looks up the join key in a **reference source** and
+  passes the value only if that independent feed confirms it within `rel_tol`;
+  a spike missing from or contradicted by the other source is surfaced. Built as
+  a reconciliation-style check (resolves a named `reference:` at run time), so it
+  reuses the cross-system machinery. Pandas-first; warehouse pushdown on the
+  roadmap.
 - **`trueset annotate` CLI** — the annotate-and-flow model from the command line:
   scores every row (`_trueset_quality` + `_trueset_flags`) and keeps them all
   (nothing blocked), prints the lowest-quality rows, and writes a scored CSV with

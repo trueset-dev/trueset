@@ -356,6 +356,16 @@ to **surface and quantify** the ambiguity, not pretend to resolve it.
     corroborate_with: [volume]   # trust the spike only if volume backs it
     severity: warn               # surface it — real extremes happen, don't block
   ```
+  Or corroborate against a **second source** ("do 2+ feeds agree?") — a real move
+  shows in both; a one-source phantom doesn't:
+  ```yaml
+  - type: source_corroboration
+    column: price
+    key: date
+    reference: source_b          # an independent feed, resolved at run time
+    rel_tol: 0.1                 # confirmed if the other source agrees within 10%
+    severity: warn
+  ```
 - **Annotate-and-flow** — instead of blocking rows, score them and let them pass
   with metadata (market data needs a *full view*):
   ```python

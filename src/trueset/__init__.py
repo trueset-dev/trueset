@@ -30,6 +30,7 @@ from .ambiguity import (
     annotate,
     corroboration_flags,
     segment_bounds,
+    source_corroboration_flags,
 )
 from .profile import DatasetProfile, profile_dataframe, suggest_from_profile
 from .quarantine import Split, split
@@ -70,6 +71,7 @@ __all__ = [
     "Split",
     "annotate",
     "corroboration_flags",
+    "source_corroboration_flags",
     "CorroborationResult",
     "Adjudications",
     "segment_bounds",

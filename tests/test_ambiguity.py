@@ -13,6 +13,7 @@ from trueset import (
     robust_bounds,
     robust_z,
     segment_bounds,
+    source_corroboration_flags,
 )
 from trueset.ambiguity import FLAGS_COLUMN, QUALITY_COLUMN, Corroboration
 from trueset.result import Status
@@ -150,3 +151,57 @@ def test_segment_bounds_are_per_segment():
 def test_segment_bounds_missing_column_raises():
     with pytest.raises(KeyError):
         segment_bounds(pd.DataFrame({"a": [1]}), "nope", "a")
+
+
+# -- 1b. cross-source corroboration ("do 2+ sources agree?") ---------------- #
+
+def _two_source_frames(source_b_price_at_spike):
+    days = list(range(1, 21))
+    price = [100.0] * 19 + [1000.0]              # primary spikes on day 20
+    primary = pd.DataFrame({"day": days, "price": price})
+    # source B agrees on the normal days; the spike day depends on the arg
+    ref_price = [100.0] * 19 + [source_b_price_at_spike]
+    ref = pd.DataFrame({"day": days, "price": ref_price})
+    return primary, ref
+
+
+def test_spike_confirmed_by_second_source_passes():
+    primary, ref = _two_source_frames(source_b_price_at_spike=1010.0)  # B agrees
+    res = source_corroboration_flags(primary, ref, "price", key="day")
+    assert res.n_flagged == 0
+
+
+def test_spike_denied_by_second_source_is_flagged():
+    primary, ref = _two_source_frames(source_b_price_at_spike=100.0)  # B says normal
+    res = source_corroboration_flags(primary, ref, "price", key="day")
+    assert res.n_flagged == 1
+    assert bool(res.uncorroborated.iloc[-1]) is True
+
+
+def test_spike_with_no_matching_key_in_source_is_flagged():
+    primary, ref = _two_source_frames(source_b_price_at_spike=1010.0)
+    ref = ref[ref.day != 20]                      # source B has no row for the spike day
+    res = source_corroboration_flags(primary, ref, "price", key="day")
+    assert res.n_flagged == 1
+
+
+def test_source_corroboration_check_resolves_reference_in_suite():
+    from trueset import PandasBackend
+    primary, ref = _two_source_frames(source_b_price_at_spike=100.0)
+    suite = Suite.from_dict({"suite": "x", "checks": [
+        {"type": "source_corroboration", "column": "price", "key": "day",
+         "reference": "source_b", "severity": "warn"},
+    ]})
+    result = suite.run(PandasBackend(primary), references={"source_b": PandasBackend(ref)})
+    assert result.results[0].status is Status.FAIL
+    assert result.passed is True                  # warn: surfaced, not blocking
+
+
+def test_source_corroboration_errors_on_non_pandas_backend():
+    from trueset.ambiguity import SourceCorroboration
+
+    class FakeSQL:
+        name = "sqlish"
+
+    r = SourceCorroboration("price", "day", "source_b").evaluate(FakeSQL(), FakeSQL())
+    assert r.status is Status.ERROR and "pandas" in r.message

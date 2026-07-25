@@ -98,9 +98,9 @@ error — and the same statistical signal can be either. You can't resolve this
 with a fixed threshold. trueset's job is to *surface and quantify* the ambiguity
 well, not pretend to eliminate it. **v1 of all five shipped (pandas); warehouse
 pushdown is the follow-up.**
-- ✅ **Corroboration checks** — `corroboration` check + `corroboration_flags()`:
-  validate a value against *supporting signals* ("does volume support this price
-  move? do 2+ sources agree?"). Kin to the reconciliation wedge.
+- ✅ **Corroboration checks** — `corroboration` (sibling signals, "does volume
+  support this move?") **and** `source_corroboration` (a second source, "do 2+
+  feeds agree?", resolved like a reconciliation reference). Kin to the wedge.
 - ✅ **Confidence score, not binary block** — `annotate()` attaches a quality
   score + flags and lets rows flow with metadata (a full view, not a hard gate).
 - ✅ **Context/regime-aware expected ranges** — `segment_bounds()` derives a band
@@ -109,10 +109,7 @@ pushdown is the follow-up.**
   a flat-baseline fallback): defensible derivation, not a hand-picked number.
 - ✅ **Adjudication feedback loop** — `Adjudications` records human "valid"
   verdicts (auditable JSON) so future runs stop re-flagging them.
-- ⬜ *Follow-ups:* warehouse pushdown for these; cross-source corroboration
-  (a second dataset, not just a sibling column); history-driven recalibration.
-
-*Origin: decoded from a commodities data-quality interview — the class of problem
-worth being world-class at.*
+- ⬜ *Follow-ups:* warehouse pushdown for these; multi-reference corroboration
+  (3+ sources with a support quorum); history-driven recalibration.
 
 <!-- Add new ideas below this line -->

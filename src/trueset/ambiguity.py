@@ -31,6 +31,7 @@ import numpy as np
 import pandas as pd
 
 from .checks import Check, register
+from .reconcile import ReconciliationCheck
 from .result import CheckResult, Severity, Status
 from .stats import robust_bounds, robust_z
 
@@ -94,6 +95,127 @@ def corroboration_flags(
 
     uncorroborated = primary_outlier & (support < min_support)
     return CorroborationResult(uncorroborated=uncorroborated, detail=detail)
+
+
+def source_corroboration_flags(
+    df: pd.DataFrame,
+    ref_df: pd.DataFrame,
+    column: str,
+    key: str,
+    ref_column: str | None = None,
+    ref_key: str | None = None,
+    z: float = 3.5,
+    rel_tol: float = 0.1,
+) -> CorroborationResult:
+    """Flag rows where `column` is a robust outlier that a SECOND SOURCE does not
+    confirm -- the "do multiple sources agree?" test.
+
+    For each row that is an outlier in the primary, we look up its `key` in the
+    reference source: if the reference reports a value within `rel_tol` (relative)
+    the extreme is *corroborated by an independent source* and passes; if the
+    reference disagrees or has no row for that key, it is surfaced. A real market
+    move shows up in both feeds; a one-source phantom does not.
+    """
+    ref_column = ref_column or column
+    ref_key = ref_key or key
+    for name, frame, cols in (("primary", df, (column, key)),
+                              ("reference", ref_df, (ref_column, ref_key))):
+        missing = [c for c in cols if c not in frame.columns]
+        if missing:
+            raise KeyError(f"source_corroboration: missing {name} column(s) {missing}")
+
+    primary_val = pd.to_numeric(df[column], errors="coerce")
+    rz = robust_z(df[column])
+    outlier = rz.abs() > z
+
+    # one value per key from the reference (first wins on duplicate keys)
+    ref_map = (
+        ref_df.dropna(subset=[ref_key])
+        .drop_duplicates(subset=[ref_key])
+        .set_index(ref_key)[ref_column]
+    )
+    ref_num = pd.to_numeric(df[key].map(ref_map), errors="coerce")
+    denom = ref_num.abs().clip(lower=1e-9)
+    disagree = (primary_val - ref_num).abs() > rel_tol * denom
+    missing_in_ref = ref_num.isna()
+
+    uncorroborated = outlier & (missing_in_ref | disagree)
+    detail = pd.DataFrame(
+        {f"z_{column}": rz, f"ref_{column}": ref_num,
+         "outlier": outlier, "uncorroborated": uncorroborated},
+        index=df.index,
+    )
+    return CorroborationResult(uncorroborated=uncorroborated, detail=detail)
+
+
+@register
+class SourceCorroboration(ReconciliationCheck):
+    """Cross-source corroboration: fails on rows where `column` is a robust
+    outlier that the reference source does not confirm on the join key.
+
+    ```yaml
+    - type: source_corroboration
+      column: price
+      key: date
+      reference: source_b       # a second, independent feed
+      rel_tol: 0.1              # agree within 10%
+      severity: warn
+    ```
+    """
+
+    type = "source_corroboration"
+
+    def __init__(
+        self,
+        column: str,
+        key: str,
+        reference: str,
+        ref_column: str | None = None,
+        ref_key: str | None = None,
+        z: float = 3.5,
+        rel_tol: float = 0.1,
+        **kw,
+    ):
+        super().__init__(reference, **kw)
+        self.column = column
+        self.key = key
+        self.ref_column = ref_column
+        self.ref_key = ref_key
+        self.z = z
+        self.rel_tol = rel_tol
+
+    def evaluate(self, backend: Any, ref_backend: Any) -> CheckResult:
+        df = getattr(backend, "df", None)
+        rdf = getattr(ref_backend, "df", None)
+        if df is None or rdf is None:  # SQL/warehouse backends: not yet supported
+            return CheckResult(
+                check=self.type, status=Status.ERROR, severity=self.severity,
+                column=self.column,
+                message="source_corroboration currently requires the in-memory "
+                        "(pandas) backend; warehouse pushdown is on the roadmap",
+            )
+        try:
+            res = source_corroboration_flags(
+                df, rdf, self.column, self.key, self.ref_column,
+                self.ref_key, self.z, self.rel_tol,
+            )
+        except KeyError as exc:
+            return CheckResult(check=self.type, status=Status.ERROR,
+                               severity=self.severity, column=self.column, message=str(exc))
+        bad = res.n_flagged
+        return CheckResult(
+            check=self.type,
+            status=Status.PASS if bad == 0 else Status.FAIL,
+            severity=self.severity,
+            column=self.column,
+            observed=bad,
+            total_rows=len(df),
+            failing_rows=bad,
+            message="" if bad == 0 else (
+                f"{bad} outlier(s) in '{self.column}' not confirmed by source "
+                f"'{self.reference}'"
+            ),
+        )
 
 
 @register
