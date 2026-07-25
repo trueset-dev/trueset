@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-25
+
 ### Added
 - **Corroboration runs on any backend now.** New `fetch_columns(columns)` protocol
   primitive (pandas/DuckDB/SQLAlchemy, cross-engine parity tested) materializes
