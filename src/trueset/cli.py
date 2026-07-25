@@ -524,6 +524,50 @@ def import_dbt(schema_path: str, model: str | None, out_path: str | None) -> Non
         console.print(text)
 
 
+@cli.command()
+@click.option("--data", required=True, help="Path to CSV/TSV/Parquet/JSON data.")
+@click.option("--checks", "checks_path", required=True, help="Path to a checks YAML file.")
+@click.option("--key", default=None, help="Key column (needed to apply adjudications).")
+@click.option("--adjudications", "adj_path", default=None,
+              help="Path to an adjudications JSON of human-approved flags to suppress.")
+@click.option("--out", "out_path", default=None,
+              help="Write the scored rows (with quality + flags) to this CSV.")
+def annotate(data: str, checks_path: str, key: str | None,
+             adj_path: str | None, out_path: str | None) -> None:
+    """Score every row and let them all flow -- the annotate-and-flow model.
+
+    Instead of blocking bad rows, attach a 0..1 quality score and the flags each
+    row failed, so nothing is dropped and downstream can decide. For data where an
+    extreme value is often the truth (markets, commodities, sensors), you keep a
+    full view instead of a hard gate.
+    """
+    from .ambiguity import FLAGS_COLUMN, QUALITY_COLUMN, Adjudications
+    from .ambiguity import annotate as _annotate
+
+    df = _load_data(data)
+    _load_suite(checks_path)  # validate the suite up front for a clean error
+    adj = Adjudications.load(adj_path) if adj_path else None
+    scored = _annotate(df, checks_path, key=key, adjudications=adj)
+
+    flagged = scored[scored[FLAGS_COLUMN] != ""]
+    console.print(
+        f"scored [bold]{len(scored)}[/] rows  |  mean quality "
+        f"[bold]{scored[QUALITY_COLUMN].mean():.3f}[/]  |  "
+        f"[yellow]{len(flagged)}[/] flagged (all kept)"
+    )
+    if len(flagged):
+        table = Table(title="lowest-quality rows", show_lines=False)
+        for col in ("row", "quality", "flags"):
+            table.add_column(col)
+        worst = flagged.sort_values(QUALITY_COLUMN).head(10)
+        for idx, r in worst.iterrows():
+            table.add_row(str(idx), f"{r[QUALITY_COLUMN]:.2f}", str(r[FLAGS_COLUMN]))
+        console.print(table)
+    if out_path:
+        scored.to_csv(out_path, index=False)
+        console.print(f"[green]wrote[/] {out_path}  ({len(scored)} rows, all kept)")
+
+
 @cli.command(name="list-checks")
 def list_checks() -> None:
     """List available check types."""

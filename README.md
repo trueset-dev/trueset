@@ -362,6 +362,10 @@ to **surface and quantify** the ambiguity, not pretend to resolve it.
   from trueset import annotate
   scored = annotate(df, suite, key="day")   # adds _trueset_quality (0..1) + _trueset_flags
   ```
+  or from the CLI (nothing blocked; writes a scored CSV):
+  ```bash
+  trueset annotate --data ticks.csv --checks checks.yml --out scored.csv
+  ```
 - **Adjudication** — when a human rules a flag "actually valid," record it so it's
   never re-flagged (the feedback loop that kills repeat false positives):
   ```python

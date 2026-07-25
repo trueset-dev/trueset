@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **`trueset annotate` CLI** — the annotate-and-flow model from the command line:
+  scores every row (`_trueset_quality` + `_trueset_flags`) and keeps them all
+  (nothing blocked), prints the lowest-quality rows, and writes a scored CSV with
+  `--out`. Supports `--key` + `--adjudications` to suppress human-approved flags.
+
 ## [0.2.0] - 2026-07-25
 
 ### Added

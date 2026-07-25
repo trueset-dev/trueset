@@ -58,3 +58,23 @@ def test_list_checks_lists_registry():
     assert res.exit_code == 0
     assert "not_null" in res.output
     assert "value_parity" in res.output
+
+
+def test_annotate_scores_and_keeps_every_row(tmp_path):
+    data = _write(tmp_path, "d.csv", "id,amount\n1,10\n2,-5\n3,20\n")
+    checks = _write(
+        tmp_path, "c.yml",
+        "suite: t\nchecks:\n"
+        "  - type: in_range\n    column: amount\n    min: 0\n",
+    )
+    out = str(tmp_path / "scored.csv")
+    res = CliRunner().invoke(
+        cli, ["annotate", "--data", data, "--checks", checks, "--out", out]
+    )
+    assert res.exit_code == 0            # annotate-and-flow never blocks
+    import pandas as pd
+    scored = pd.read_csv(out)
+    assert len(scored) == 3              # every row kept
+    assert {"_trueset_quality", "_trueset_flags"}.issubset(scored.columns)
+    # the negative-amount row is flagged but still present
+    assert (scored["_trueset_flags"].fillna("") == "in_range(amount)").sum() == 1
