@@ -1,245 +1,37 @@
 # trueset
 
 [![CI](https://github.com/trueset-dev/trueset/actions/workflows/ci.yml/badge.svg)](https://github.com/trueset-dev/trueset/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/trueset.svg)](https://pypi.org/project/trueset/)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-**Write a data-quality check once, run it anywhere** — pandas today, PySpark and
-your warehouse next. One declarative check language, one Python API, one CLI.
+**Catch the data problems every other check misses.**
 
-Data quality tools today force a trade-off: `dbt` tests are SQL-only, Great
-Expectations is powerful but heavy, and each engine (pandas / Spark / SQL) tends
-to want its own syntax. `trueset` bets on a single small **Backend protocol** — a
-check is written once and runs unchanged on any engine that implements the
-protocol. Adding Spark or Snowflake support means writing *one class*, not
-re-authoring a single check.
-
-## Quickstart
+`dbt` tests, Great Expectations, and Soda all validate one table in isolation.
+They can't see the failures that matter most: a value that silently changed
+*between* two systems, or an extreme reading that's either a real event or a
+$2.9M error. trueset is built for exactly those — and every check is written once
+and runs on any engine (pandas, DuckDB, or your warehouse as pushed-down SQL).
 
 ```bash
-# From source (PyPI release coming — the name is being finalized):
-git clone https://github.com/trueset-dev/trueset && cd trueset
-pip install -e ".[sql]"          # [sql] adds the DuckDB backend; omit for pandas-only
-
-trueset run --data examples/orders.csv --checks examples/checks.yml
-trueset list-checks
+pip install trueset
 ```
 
-Declarative checks (`checks.yml`):
+---
 
-```yaml
-suite: orders_quality
-checks:
-  - type: not_null
-    column: order_id
-  - type: unique
-    column: order_id
-  - type: in_range
-    column: amount
-    min: 0
-  - type: in_set
-    column: status
-    values: [pending, shipped, delivered, cancelled]
-  - type: matches_regex
-    column: email
-    pattern: '[^@\s]+@[^@\s]+\.[^@\s]+'
-    severity: warn        # warns, doesn't fail the run
-```
+## Proof #1 — Cross-system reconciliation
 
-Or the Python API:
-
-```python
-import pandas as pd
-from trueset import Suite, validate_dataframe
-
-df = pd.read_csv("orders.csv")
-result = validate_dataframe(df, "checks.yml")
-
-print(result.passed)                    # False
-print(result.to_dict())                 # JSON-ready, ship to a warehouse/dashboard
-```
-
-The CLI exits non-zero when any `error`-severity check fails, so it drops
-straight into CI, dbt, or Airflow.
-
-## Use it anywhere in your pipeline (not just the warehouse)
-
-trueset is a **library first**. Because checks only speak to the `Backend`
-protocol and the pandas backend takes any DataFrame, you can validate data
-*in flight* — at ingestion, before loading — and fail the pipeline the instant a
-batch is bad, so garbage never reaches storage (the "shift-left" pattern):
-
-```python
-from trueset import validate_dataframe
-
-df = extract_from_api()                        # your ingestion step
-result = validate_dataframe(df, "checks.yml")  # same suite, in-memory
-if not result.passed:
-    raise ValueError(f"bad batch, not loading: {result.counts}")   # fail the task
-load_to_warehouse(df)                          # only reached if data is clean
-```
-
-Drop that into an Airflow `PythonOperator`, a Dagster op, a Prefect task, a
-Lambda, or a plain script. The *same* `checks.yml` then runs post-load against
-the warehouse (`SQLAlchemyBackend`) and in CI (the Action) — write once, enforce
-at ingestion, in transit, and at rest. See
-[`examples/pipeline_demo.py`](examples/pipeline_demo.py) for a runnable gate.
-(Batch / micro-batch oriented; native Spark validation is on the roadmap.)
-
-### Quarantine bad rows, keep the clean ones flowing
-
-Blocking the whole batch is one option; routing is better. `split()` partitions a
-batch into clean and bad rows — with the reason each bad row failed — so you can
-dead-letter the bad and keep moving:
-
-```python
-from trueset import split
-
-result = split(df, "checks.yml")     # or a Suite / dict spec
-load_to_warehouse(result.good)       # clean rows proceed
-dead_letter(result.bad_annotated())  # bad rows + a `_trueset_reasons` column
-```
-
-Only `error`-severity checks divert a row by default (a `warn` surfaces the issue
-without quarantining it). From the CLI: `trueset run --data batch.csv --checks
-c.yml --quarantine bad.csv`. Under the hood, checks expose a per-row
-`failure_spec()` and every backend can return the actual failing rows
-(`backend.failing_rows(...)`) — identical across pandas, DuckDB, and SQL. trueset
-*identifies* the bad rows; **you** decide where they go. See
-[`examples/quarantine_demo.py`](examples/quarantine_demo.py).
-
-## Gate your CI in three lines
-
-trueset ships a GitHub Action, so a data-quality check becomes a required status
-check on every pull request:
-
-```yaml
-# .github/workflows/data-quality.yml
-name: data-quality
-on: [pull_request]
-jobs:
-  trueset:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: trueset-dev/trueset@v0
-        with:
-          data: data/orders.csv
-          checks: quality/orders.yml
-```
-
-The job fails the moment an `error`-severity check fails. Use `severity: warn` on
-a check to surface a problem without blocking the merge.
-
-## Profiling & AI-assisted authoring
-
-Draft a check suite instead of writing one by hand:
+The thing single-table tools aren't architected to do, and whose only OSS option
+(`data-diff`) was archived in 2024: validate one dataset **against another
+system**. Did the warehouse match the source after the load?
 
 ```bash
-trueset profile  --data orders.csv                 # stats + inferred semantic types
-trueset suggest  --data orders.csv                 # deterministic draft suite (no AI)
-trueset suggest  --data orders.csv --calibrate     # + data-derived ranges & volume band
-trueset suggest  --data orders.csv --ai --out checks.yml           # AI copilot
-trueset suggest  --data orders.csv --describe "amount can't be negative; \
-    status is one of pending/shipped/delivered/cancelled"        # English -> checks
+trueset reconcile --data warehouse.csv --checks reconcile.yml --ref source=source.csv
 ```
-
-**Auto-calibrated thresholds** (`--calibrate`): rather than hand-picking limits,
-trueset derives numeric `in_range` bounds (from the 1st/99th percentiles) and a
-row-count volume band straight from your data — emitted as `warn` for you to
-review and commit, never auto-enforced. Run it on known-good data: calibration
-learns from the sample, so representative input in means sensible thresholds out.
-
-**The trust rule that makes AI safe here:** the copilot only ever *authors*
-checks. Every spec it returns — from profiling or natural language — is passed
-through the same deterministic check registry (`build_check`). Anything the
-model hallucinates or mis-configures is discarded before it can reach your
-data. The AI is never in the runtime pass/fail path, so your validation stays
-deterministic and auditable. The model is injected as a plain callable
-(`Completer`), so it's provider-agnostic and fully testable without a key.
-
-```python
-from trueset import profile_dataframe, suggest_from_profile
-from trueset.copilot import anthropic_completer, checks_from_profile
-
-prof = profile_dataframe(df)
-draft = suggest_from_profile(prof)                      # deterministic
-draft = checks_from_profile(prof, anthropic_completer())  # AI (needs ANTHROPIC_API_KEY)
-```
-
-## Portability, proven (pandas ⇄ DuckDB)
-
-The whole bet is that a check is written once and runs on any engine. It's not
-a slogan -- it's tested. The identical suite, run on pandas (in-memory) and on
-DuckDB (SQL pushed into the database), returns the same verdict:
-
-```
-check                   pandas      duckdb      match
-------------------------------------------------------
-row_count_parity        pass(0)     pass(0)     OK
-referential_integrity   fail(1)     fail(1)     OK
-value_parity            fail(3)     fail(3)     OK
-------------------------------------------------------
-identical verdict: True
-```
-
-```bash
-pip install -e ".[sql]"                 # adds duckdb
-python examples/portability_demo.py     # runs the comparison above
-```
-
-The DuckDB backend implements the same `Backend` protocol, but every check
-becomes `SELECT count(*) ... WHERE ...` executed inside the database -- so full
-tables never move. `tests/test_duckdb.py` asserts the two engines agree.
-
-## Run against your warehouse (Postgres, Snowflake, BigQuery, …)
-
-The `SQLAlchemyBackend` generalizes the DuckDB proof to **anything SQLAlchemy
-speaks** — Postgres, MySQL/MariaDB, SQLite, Snowflake, BigQuery, Redshift. Same
-checks, same verdicts, pushed down as SQL. Point the CLI straight at a table:
-
-```bash
-trueset run \
-  --url "postgresql+psycopg://user:pw@host:5432/analytics" \
-  --table public.orders \
-  --checks quality/orders.yml
-```
-
-Or from Python:
-
-```python
-from sqlalchemy import create_engine
-from trueset import Suite, SQLAlchemyBackend
-
-engine = create_engine("snowflake://…")          # any SQLAlchemy URL
-backend = SQLAlchemyBackend(engine, "ORDERS")
-result = Suite.from_yaml("orders.yml").run(backend)
-```
-
-`tests/test_sqlalchemy.py` runs the identical example suite on pandas **and** on
-a SQL database and asserts the verdicts match — the same guarantee we hold for
-DuckDB, now for every warehouse. Reconciliation works across engines too: the
-primary can be a pandas DataFrame while the reference is a Postgres table.
-
-## Cross-system reconciliation (the wedge)
-
-The thing no single-source tool (GE, Soda, Pandera, dbt tests) is architected
-to do, and whose only open-source option (`data-diff`) was archived in 2024:
-validate one dataset **against another system**. Because checks talk only to
-the `Backend` protocol, a reconciliation check just holds a second backend --
-which can be a totally different engine.
-
-```bash
-trueset reconcile \
-  --data   warehouse_orders.csv \
-  --checks reconcile.yml \
-  --ref    source=source_orders.csv
-```
-
 ```yaml
 suite: warehouse_vs_source
 checks:
   - type: row_count_parity        # counts agree within tolerance
     reference: source
-    tolerance: 0.0
   - type: referential_integrity   # every key traces back to the source
     column: order_id
     reference: source
@@ -251,207 +43,69 @@ checks:
     ref_key: id
 ```
 
-`value_parity` reports four failure modes at once: mismatched values on shared
-keys, keys only in the primary, keys only in the reference, and **duplicate join
-keys** on either side (an ambiguous join is itself a reconciliation defect).
-Either side can be a file, DuckDB, or any SQLAlchemy warehouse — they need not
-share an engine.
+`value_parity` reports every failure mode at once — mismatched values on shared
+keys, keys only in the primary, keys only in the reference, and duplicate keys.
+Both sides can be *different engines* (a CSV vs a warehouse table), because a
+check only ever talks to the `Backend` protocol. Runs pushed-down on the
+warehouse — full tables never move.
 
-## Governance: enforcement + evidence
+## Proof #2 — Corroboration *(newer, experimental)*
 
-trueset isn't a catalog (that's DataHub/Collibra territory). It owns the half
-catalogs are weak on — **enforcing** policy and **proving** compliance happened.
-Governance is optional metadata on a check, nothing more:
+When an extreme value is often the *truth*, not an error (a demand spike, a
+market move), a fixed threshold can't tell signal from mistake. trueset judges a
+suspicious value against **supporting signals** instead of in isolation:
 
 ```yaml
-- type: matches_regex
-  column: email
-  pattern: '[^@\s]+@[^@\s]+\.[^@\s]+'
-  owner: risk-team              # accountable party
-  sensitivity: pii              # public|internal|confidential|pii|pci|phi
-  regulation: [gdpr, ccpa]      # regime tags
-  description: "Customer email is PII and must be well-formed"
+- type: corroboration
+  column: price
+  corroborate_with: [volume]      # trust the spike only if volume backs it
+  severity: warn
+- type: source_corroboration
+  column: price
+  key: date
+  reference: source_b             # …or if a second independent feed agrees
 ```
 
-These fields change nothing about how the check runs — they ride onto the result
-as machine-readable, auditable evidence. `trueset report` then answers policy
-questions directly:
+A real move shows up in volume and in both feeds; a lone spike (the silent error)
+gets surfaced. See [`examples/ambiguity_demo.py`](examples/ambiguity_demo.py).
 
-```bash
-trueset report --data orders.csv --checks governed.yml --by sensitivity
+---
+
+## The full toolkit
+
+trueset is more than the two proofs — everything below ships today:
+
+| Area | What you get |
+|------|--------------|
+| **Checks** | `not_null`, `unique`, `in_set`, `in_range`, `matches_regex`, `row_count`, `no_duplicate_rows`, `columns_exist`, `metric` (aggregate validation) |
+| **Reconciliation** | `row_count_parity`, `referential_integrity`, `value_parity` — cross-system, cross-engine |
+| **Ambiguity** | `corroboration`, `source_corroboration`, `annotate` (per-row quality score + flow), `Adjudications` (review once, stop re-flagging), `segment_bounds` (context-aware ranges), robust MAD stats |
+| **Portability** | one check runs on pandas, DuckDB, or any SQLAlchemy warehouse (Postgres/MySQL/Snowflake/BigQuery) — verified identical, incl. real Postgres |
+| **Pipeline** | run at ingestion / in-flight / post-load; `split()` + `--quarantine` route bad rows to a dead-letter sink |
+| **Governance** | `owner`/`sensitivity`/`regulation`/`tags` on any check; `report --by`; PII/PCI classification |
+| **Monitoring** | `freshness` + `monitor` (volume/metric anomaly over run history); results persistence for an audit trail |
+| **Authoring** | `profile`, `suggest` (+ `--calibrate` for data-derived thresholds), AI copilot (drafts checks; never judges data) |
+| **Adopt & ship** | `import-dbt` (reuse existing dbt tests), a GitHub Action, `pip install trueset` |
+
+**One trust rule throughout:** AI can *author* and *explain*; only deterministic,
+auditable code ever decides pass/fail. Your validation stays reproducible.
+
+## Write once, run anywhere
+
+```python
+from trueset import Suite, PandasBackend, validate_dataframe
+result = validate_dataframe(df, "checks.yml")   # in a pipeline step
+print(result.passed, result.to_dict())           # JSON-ready for CI / dashboards
 ```
+The same `checks.yml` runs unchanged against a warehouse table
+(`trueset run --url postgresql://… --table orders --checks checks.yml`) and in CI
+(the Action). Exit code is non-zero on any `error`-severity failure.
 
-```
- governance report :: orders_quality_governed  (by sensitivity)
-┏━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━┳━━━━━━┳━━━━━━━┳━━━━━━━━━━━┓
-┃ sensitivity  ┃ checks ┃ pass ┃ fail ┃ error ┃ status    ┃
-┡━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━╇━━━━━━╇━━━━━━━╇━━━━━━━━━━━┩
-│ pii          │ 1      │ 0    │ 1    │ 0     │ VIOLATION │
-│ confidential │ 2      │ 0    │ 2    │ 0     │ VIOLATION │
-└──────────────┴────────┴──────┴──────┴───────┴───────────┘
-⚠ 3 failing check(s) on sensitive (pii/pci/phi/confidential) data.
-```
+## Learn more
 
-Group `--by owner` to route failures to a team, or `--by regulation` for a GDPR
-/ SOX posture. `--json` emits the same as auditable evidence for a compliance
-trail.
-
-**Classification is suggested, never imposed.** `trueset profile` infers a
-`sensitivity` for high-precision patterns (email, phone, SSN, credit card via
-Luhn, IBAN), and `trueset suggest` pre-tags the drafted checks:
-
-```
-column   inferred   sensitivity
-email    email      pii
-ssn      ssn        pii
-card     credit_card pci
-```
-
-Both the deterministic profiler and the AI copilot only *suggest* tags — like
-every check, they are reviewed and committed by a human, never auto-applied.
-
-## Monitoring: freshness & volume
-
-Turn one-shot validation into continuous monitoring. Persist runs, then watch for
-staleness and volume drift:
-
-```bash
-trueset run --url "postgresql://…" --table orders --checks orders.yml --save "postgresql://…/trueset_history"
-trueset history --store "postgresql://…/trueset_history"      # the audit trail
-trueset monitor --store "postgresql://…/trueset_history" --suite orders_quality --sigma 3
-```
-
-- **`freshness`** is an ordinary check — the newest timestamp must be recent:
-  ```yaml
-  - type: freshness
-    column: created_at
-    max_age_hours: 6        # fail if the table hasn't updated in 6 hours
-  ```
-- **`trueset monitor`** trends any metric against the baseline of past runs and
-  exits non-zero on a >`sigma` anomaly — a silent 90% drop in rows is caught even
-  when every row that *is* there passes every check:
-  ```bash
-  trueset monitor --store "$H" --suite orders --metric rows --method mad
-  trueset monitor --store "$H" --suite orders --metric failing_rows --check not_null --column email
-  ```
-  `--metric` can be `rows`, `failing_rows`, or `total_rows` (with `--check`/
-  `--column` to pick a check); `--method` is `zscore` (mean/std) or `mad`
-  (median-absolute-deviation — robust when a few past runs were themselves
-  outliers). Detection is deterministic and explainable — never a black box.
-
-## Handling ambiguity (when the extreme value is the *truth*)
-
-The hardest real-world data problem — especially in commodities, markets, and
-sensors: an extreme value is often *correct* (a cold-snap demand spike, a
-geopolitical event, a COVID price move), not an error, and the same statistical
-signal can be either. You can't threshold your way out of that. trueset's job is
-to **surface and quantify** the ambiguity, not pretend to resolve it.
-
-- **Corroboration** — judge a suspicious value against *supporting signals*, not
-  in isolation. A real price spike shows up in volume too; a silent bad tick
-  doesn't:
-  ```yaml
-  - type: corroboration
-    column: price
-    corroborate_with: [volume]   # trust the spike only if volume backs it
-    severity: warn               # surface it — real extremes happen, don't block
-  ```
-  Or corroborate against a **second source** ("do 2+ feeds agree?") — a real move
-  shows in both; a one-source phantom doesn't:
-  ```yaml
-  - type: source_corroboration
-    column: price
-    key: date
-    reference: source_b          # an independent feed, resolved at run time
-    rel_tol: 0.1                 # confirmed if the other source agrees within 10%
-    severity: warn
-  ```
-- **Annotate-and-flow** — instead of blocking rows, score them and let them pass
-  with metadata (market data needs a *full view*):
-  ```python
-  from trueset import annotate
-  scored = annotate(df, suite, key="day")   # adds _trueset_quality (0..1) + _trueset_flags
-  ```
-  or from the CLI (nothing blocked; writes a scored CSV):
-  ```bash
-  trueset annotate --data ticks.csv --checks checks.yml --out scored.csv
-  ```
-- **Adjudication** — when a human rules a flag "actually valid," record it so it's
-  never re-flagged (the feedback loop that kills repeat false positives):
-  ```python
-  from trueset import Adjudications
-  adj = Adjudications(); adj.mark_valid("in_range(price)", "2026-03-09")
-  annotate(df, suite, key="day", adjudications=adj)   # suppressed going forward
-  ```
-- **Context-aware ranges** — one expected band *per segment* (region/season), via
-  `segment_bounds(df, "price", "region")`, so a legitimate regime isn't judged by
-  another's. All of it rests on robust statistics (`stats.robust_z` / MAD).
-
-Runnable: [`examples/ambiguity_demo.py`](examples/ambiguity_demo.py). The
-`corroboration` / `source_corroboration` checks run on **any backend** (pandas,
-DuckDB, or a SQL warehouse) — they materialize only the analyzed columns, proven
-identical across engines. (`annotate` / `segment_bounds` operate on an in-memory
-DataFrame.)
-
-## Works with your stack (dbt today)
-
-trueset composes with the tools you already run — it doesn't replace them. If you
-have dbt tests, adopt trueset **without rewriting a single one**:
-
-```bash
-trueset import-dbt --schema models/schema.yml --model orders --out orders.yml
-trueset run --url "$WAREHOUSE" --table analytics.orders --checks orders.yml
-```
-
-`not_null`/`unique` map directly, `accepted_values`→`in_set`,
-`relationships`→`referential_integrity`, and dbt test severity is preserved.
-Custom/singular dbt tests are reported (never silently dropped), and every
-imported check is validated so the output always runs. Point trueset at the
-tables dbt builds and you also get cross-engine portability, reconciliation
-against the source, governance, and monitoring — on top of your existing tests.
-
-## Built-in checks
-
-`columns_exist`, `not_null`, `unique`, `in_set`, `in_range`, `matches_regex`,
-`row_count`, `no_duplicate_rows`, `freshness`, `metric`, plus the reconciliation
-checks `row_count_parity`, `referential_integrity`, `value_parity`. Each has a
-`severity` of `error` (default) or `warn`.
-
-## Architecture
-
-```
-YAML / Python API
-        │
-     Suite ── list of ── Check          checks speak ONLY to the Backend
-        │                  │            protocol, never to an engine
-        ▼                  ▼
-   SuiteResult  ◀──  Backend protocol
-                          ▲
-        ┌────────────┬───────┴───────┬────────────┐
-   PandasBackend  DuckDBBackend  SQLAlchemyBackend  (SparkBackend)
-     [built]        [built]     [built: any warehouse]  [next]
-```
-
-The `Backend` protocol (`src/trueset/backends/base.py`) is deliberately tiny:
-`row_count`, `null_count`, `distinct_count`, `count_out_of_range`, etc. A SQL
-backend implements each as a pushed-down `SELECT count(*) ... WHERE ...` so data
-never leaves the warehouse.
-
-## Roadmap
-
-See **[ROADMAP.md](ROADMAP.md)** for what's shipped, what's next, and the idea
-inbox. Governance, results history, freshness/volume monitoring, and dbt import
-all shipped in v0.1.0; auto-calibrated thresholds and AI failure diagnosis are
-next. Have an idea? Drop it in the roadmap's idea inbox or open a
-[feature request](../../issues/new?template=feature_request.md).
-
-## Development
-
-```bash
-pip install -e ".[dev]"
-pytest
-```
+- [ROADMAP.md](ROADMAP.md) — what's shipped, what's next, the idea inbox
+- [CHANGELOG.md](CHANGELOG.md) · [examples/](examples/) · [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## License
 
-Apache-2.0 (recommended for broad corporate adoption).
+Apache-2.0.
