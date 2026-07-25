@@ -8,3 +8,6 @@ build/
 venv/
 .ruff_cache/
 .DS_Store
+
+# mkdocs build output
+site/

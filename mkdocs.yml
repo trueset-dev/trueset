@@ -1,0 +1,60 @@
+site_name: trueset
+site_description: Catch the data problems every other check misses — cross-system reconciliation and portable data quality.
+site_url: https://trueset-dev.github.io/trueset/
+repo_url: https://github.com/trueset-dev/trueset
+repo_name: trueset-dev/trueset
+edit_uri: edit/main/docs/
+copyright: Apache-2.0
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      accent: deep purple
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      accent: deep purple
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - content.code.copy
+    - toc.follow
+    - search.suggest
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - Guides:
+      - Cross-system reconciliation: guides/reconciliation.md
+      - Checks: guides/checks.md
+      - Corroboration & ambiguity: guides/ambiguity.md
+      - Backends & warehouses: guides/backends.md
+      - Pipelines & quarantine: guides/pipelines.md
+      - Governance & classification: guides/governance.md
+      - Monitoring & history: guides/monitoring.md
+      - Authoring checks: guides/authoring.md
+  - Reference:
+      - CLI: reference/cli.md
+      - Checks: reference/checks.md
+  - Roadmap: https://github.com/trueset-dev/trueset/blob/main/ROADMAP.md
