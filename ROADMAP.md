@@ -50,6 +50,11 @@ Nothing here is a promise; it's a living list we triage as real users test.
 2. **AI failure diagnosis** — explain *why* a check failed (root-cause hints on
    top of the deterministic result), building on run history. AI explains; it
    never decides pass/fail.
+   - Related: **AI-assisted classification** — deterministic PII/PCI detection
+     ships today (email/phone/SSN/credit-card/IBAN → sensitivity tags). The open
+     half is the *fuzzy* cases: an LLM suggesting `sensitivity`/`owner`/
+     `regulation` for columns no pattern catches. Suggested, human-reviewed,
+     never auto-applied — same trust rule as checks.
 3. **Data contracts** — a named, versioned suite bound to a dataset with an
    `owner` + `sla` header. Reconciliation is already cross-system contract
    enforcement; this formalizes naming/versioning/ownership.
