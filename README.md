@@ -2,10 +2,10 @@
 
 [![CI](https://github.com/trueset-dev/trueset/actions/workflows/ci.yml/badge.svg)](https://github.com/trueset-dev/trueset/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/trueset.svg)](https://pypi.org/project/trueset/)
-[![Docs](https://img.shields.io/badge/docs-trueset--dev.github.io-0F766E.svg)](https://trueset-dev.github.io/trueset/)
+[![Docs](https://img.shields.io/badge/docs-trueset--dev.github.io-0F766E.svg)](https://trueset-dev.github.io/trueset/docs/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-📖 **[Documentation](https://trueset-dev.github.io/trueset/)** · [Getting started](https://trueset-dev.github.io/trueset/getting-started/) · [Reconciliation guide](https://trueset-dev.github.io/trueset/guides/reconciliation/)
+🌐 **[Website](https://trueset-dev.github.io/trueset/)** · 📖 **[Documentation](https://trueset-dev.github.io/trueset/docs/)** · [Getting started](https://trueset-dev.github.io/trueset/docs/getting-started/) · [Reconciliation guide](https://trueset-dev.github.io/trueset/docs/guides/reconciliation/)
 
 **Catch the data problems every other check misses.**
 

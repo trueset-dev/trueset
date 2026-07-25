@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>trueset — data quality &amp; cross-system reconciliation</title>
+<meta name="description" content="trueset writes a data-quality check once and runs it unchanged on pandas, DuckDB, or your warehouse — then reconciles across systems to catch mismatches single-source tools miss.">
+<link rel="icon" href="trueset-mark.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F8F9FA; --panel:#FFFFFF; --ink:#14181B; --slate:#4E575F;
+    --line:#E4E7EA; --teal:#0F766E; --teal-ink:#0B5F58; --teal-wash:#ECF4F2;
+    --pass:#157347; --fail:#B4231E;
+    --sans:'IBM Plex Sans',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+    --wrap:1080px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+    font-size:16px;line-height:1.65;-webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--teal-ink);text-decoration:none}
+  a:hover{text-decoration:underline}
+  :focus-visible{outline:2px solid var(--teal);outline-offset:2px;border-radius:3px}
+  .wrap{max-width:var(--wrap);margin:0 auto;padding:0 24px}
+
+  /* header */
+  header{position:sticky;top:0;z-index:20;background:rgba(248,249,250,.82);
+    backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+  .bar{display:flex;align-items:center;gap:20px;height:60px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:600;font-size:19px;letter-spacing:-.3px}
+  .brand svg{display:block}
+  .brand .b-set{color:var(--teal-ink)}
+  .nav{margin-left:auto;display:flex;align-items:center;gap:22px}
+  .nav a{color:var(--slate);font-size:14.5px;font-weight:500}
+  .nav a:hover{color:var(--ink);text-decoration:none}
+  .chip{font-family:var(--mono);font-size:13px;background:var(--panel);
+    border:1px solid var(--line);border-radius:7px;padding:7px 11px;color:var(--ink);
+    display:inline-flex;align-items:center;gap:9px;cursor:pointer;transition:border-color .15s}
+  .chip:hover{border-color:#cfd4d8}
+  .chip .cp{color:var(--slate);font-size:11px;letter-spacing:.4px}
+  .nav .chip{color:var(--ink)}
+  @media(max-width:760px){.nav .hide-sm{display:none}}
+
+  /* hero */
+  .hero{display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center;
+    padding:76px 0 68px}
+  .eyebrow{font-family:var(--mono);font-size:12px;font-weight:500;letter-spacing:1.4px;
+    text-transform:uppercase;color:var(--teal-ink)}
+  h1{font-size:clamp(2.3rem,5.2vw,3.5rem);line-height:1.04;letter-spacing:-1.4px;
+    font-weight:600;margin:16px 0 0}
+  .lede{font-size:1.15rem;color:var(--slate);margin:20px 0 0;max-width:34ch}
+  .cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:30px}
+  .btn{font-family:var(--sans);font-size:15px;font-weight:600;padding:11px 20px;
+    border-radius:9px;border:1px solid transparent;cursor:pointer;transition:.15s}
+  .btn-primary{background:var(--teal);color:#fff}
+  .btn-primary:hover{background:var(--teal-ink);text-decoration:none}
+  .btn-ghost{background:transparent;border-color:var(--line);color:var(--ink)}
+  .btn-ghost:hover{border-color:#c9ced2;text-decoration:none}
+  .install{margin-top:22px}
+  .install .chip{font-size:14px;padding:10px 14px}
+
+  /* signature panel */
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    box-shadow:0 1px 2px rgba(20,24,27,.04),0 12px 34px -18px rgba(20,24,27,.16);
+    overflow:hidden}
+  .panel-head{display:flex;align-items:center;gap:9px;font-family:var(--mono);
+    font-size:12.5px;color:var(--slate);padding:13px 18px;border-bottom:1px solid var(--line);
+    background:#fcfcfd}
+  .panel-head .dot{width:9px;height:9px;border-radius:50%;background:var(--teal)}
+  .rowr{display:flex;align-items:center;justify-content:space-between;
+    padding:15px 18px;border-bottom:1px solid var(--line)}
+  .rowr .cn{font-family:var(--mono);font-size:14px;color:var(--ink)}
+  .tag{font-family:var(--mono);font-size:12px;font-weight:500;padding:3px 9px;border-radius:20px}
+  .tag.pass{color:var(--pass);background:#eaf5ee}
+  .tag.fail{color:var(--fail);background:#fbecea}
+  .panel-note{padding:16px 18px;font-size:14.5px;color:var(--ink);background:var(--teal-wash)}
+  .panel-note b{font-weight:600}
+  .panel-cap{font-size:13px;color:var(--slate);margin:14px 2px 0;line-height:1.55}
+
+  /* sections */
+  .section{padding:60px 0;border-top:1px solid var(--line)}
+  .sec-eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:1.4px;
+    text-transform:uppercase;color:var(--slate)}
+  h2{font-size:clamp(1.5rem,3vw,1.95rem);line-height:1.15;letter-spacing:-.7px;
+    font-weight:600;margin:12px 0 0;max-width:20ch}
+  .sec-body{color:var(--slate);font-size:1.05rem;margin:16px 0 0;max-width:60ch}
+
+  /* code */
+  .code{background:var(--ink);border-radius:12px;overflow:hidden;margin-top:26px}
+  .code-head{font-family:var(--mono);font-size:12px;color:#9aa3ab;padding:11px 16px;
+    border-bottom:1px solid #23282d;display:flex;gap:8px;align-items:center}
+  .code-head .fn{color:#c9d1d9}
+  pre{margin:0;padding:18px 18px;overflow-x:auto}
+  code{font-family:var(--mono);font-size:13.5px;line-height:1.75;color:#dfe4ea}
+  .c-key{color:#7fd1c4}.c-str{color:#e3b981}.c-cmt{color:#6b747c}.c-num{color:#a6b4ff}
+  .run-line{font-family:var(--mono);font-size:13.5px;color:var(--slate);margin:16px 2px 0}
+  .run-line b{color:var(--ink);font-weight:500}
+
+  /* features */
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:28px 40px;margin-top:36px}
+  .feat h3{font-size:1.05rem;font-weight:600;margin:0 0 7px;display:flex;align-items:center;gap:10px}
+  .feat h3 .ic{width:22px;height:22px;color:var(--teal)}
+  .feat p{color:var(--slate);font-size:.98rem;margin:0}
+
+  /* closing */
+  .close{text-align:center;padding:72px 0}
+  .close h2{margin:0 auto;max-width:none}
+  .close .cta{justify-content:center}
+  .close .sub{color:var(--slate);margin-top:14px;font-size:.98rem}
+
+  footer{border-top:1px solid var(--line);padding:34px 0;color:var(--slate);font-size:14px}
+  .foot{display:flex;flex-wrap:wrap;align-items:center;gap:18px}
+  .foot .sp{margin-left:auto}
+  .foot a{color:var(--slate)}.foot a:hover{color:var(--ink);text-decoration:none}
+
+  @media(max-width:860px){
+    .hero{grid-template-columns:1fr;gap:40px;padding:52px 0}
+    .lede{max-width:46ch}
+    .grid{grid-template-columns:1fr;gap:26px}
+  }
+
+  .reveal{opacity:0;transform:translateY(12px);animation:rise .7s cubic-bezier(.2,.7,.2,1) forwards}
+  .reveal.d1{animation-delay:.06s}.reveal.d2{animation-delay:.12s}
+  .reveal.d3{animation-delay:.18s}.reveal.d4{animation-delay:.24s}
+  @keyframes rise{to{opacity:1;transform:none}}
+  @media(prefers-reduced-motion:reduce){
+    .reveal{animation:none;opacity:1;transform:none}html{scroll-behavior:auto}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap bar">
+    <a class="brand" href="." aria-label="trueset home">
+      <svg width="34" height="34" viewBox="0 0 52 52" fill="none" aria-hidden="true">
+        <clipPath id="hA"><rect x="6" y="14" width="24" height="24" rx="6.5"/></clipPath>
+        <g clip-path="url(#hA)"><rect x="22" y="14" width="24" height="24" rx="6.5" fill="#0F766E"/></g>
+        <rect x="6" y="14" width="24" height="24" rx="6.5" fill="none" stroke="#14181B" stroke-width="2.6"/>
+        <rect x="22" y="14" width="24" height="24" rx="6.5" fill="none" stroke="#14181B" stroke-width="2.6"/>
+      </svg>
+      <span>true<span class="b-set">set</span></span>
+    </a>
+    <nav class="nav">
+      <a href="docs/">Docs</a>
+      <a href="https://github.com/trueset-dev/trueset" class="hide-sm">GitHub</a>
+      <a href="https://pypi.org/project/trueset/" class="hide-sm">PyPI</a>
+      <button class="chip hide-sm" data-copy="pip install trueset">pip install trueset <span class="cp">COPY</span></button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="hero">
+    <div>
+      <div class="eyebrow reveal">Open-source data quality &amp; reconciliation</div>
+      <h1 class="reveal d1">Find the drift between your systems.</h1>
+      <p class="lede reveal d2">trueset writes a data-quality check once and runs it unchanged on pandas, DuckDB, or your warehouse — then reconciles across systems to catch the mismatches single-source tools miss.</p>
+      <div class="cta reveal d3">
+        <a class="btn btn-primary" href="docs/">Read the docs</a>
+        <a class="btn btn-ghost" href="https://github.com/trueset-dev/trueset">View on GitHub</a>
+      </div>
+      <div class="install reveal d3">
+        <button class="chip" data-copy="pip install trueset">$ pip install trueset <span class="cp">COPY</span></button>
+      </div>
+    </div>
+    <div class="reveal d2">
+      <div class="panel">
+        <div class="panel-head"><span class="dot"></span> trueset reconcile · warehouse ⇄ source</div>
+        <div class="rowr"><span class="cn">row_count_parity</span><span class="tag pass">pass</span></div>
+        <div class="rowr"><span class="cn">referential_integrity</span><span class="tag fail">fail · 1</span></div>
+        <div class="rowr"><span class="cn">value_parity</span><span class="tag fail">fail · 3</span></div>
+        <div class="panel-note"><b>Row counts matched. The values didn’t.</b></div>
+      </div>
+      <p class="panel-cap">trueset compares two systems row by row, so silent corruption can’t hide behind matching totals — the check no single-source tool can express.</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="sec-eyebrow">The gap</div>
+    <h2>Most tools check one table at a time.</h2>
+    <p class="sec-body">The expensive failures live <em>between</em> systems: a value that changed on the way to the warehouse, a key that lost its source, a row that vanished in a pipeline hop. trueset validates within a dataset <em>and</em> across datasets — on whatever engine holds them. Same check, same result, whether it runs in memory or as SQL pushed into your database.</p>
+  </section>
+
+  <section class="section">
+    <div class="sec-eyebrow">Checks as config</div>
+    <h2>Readable checks. Real enforcement.</h2>
+    <p class="sec-body">Declare what should be true in YAML or Python. Run it in CI, in your pipeline, or against the warehouse — the CLI exits non-zero when data is bad, so it gates a pipeline out of the box.</p>
+    <div class="code">
+      <div class="code-head"><span class="fn">reconcile.yml</span></div>
+<pre><code><span class="c-key">suite</span>: warehouse_vs_source
+<span class="c-key">checks</span>:
+  - <span class="c-key">type</span>: row_count_parity      <span class="c-cmt"># counts agree within tolerance</span>
+    <span class="c-key">reference</span>: source
+  - <span class="c-key">type</span>: referential_integrity  <span class="c-cmt"># every key traces back to the source</span>
+    <span class="c-key">column</span>: order_id
+    <span class="c-key">reference</span>: source
+    <span class="c-key">ref_column</span>: id
+  - <span class="c-key">type</span>: value_parity           <span class="c-cmt"># join on key, compare the values</span>
+    <span class="c-key">key</span>: order_id
+    <span class="c-key">columns</span>: [<span class="c-str">amount</span>, <span class="c-str">status</span>]
+    <span class="c-key">reference</span>: source</code></pre>
+    </div>
+    <p class="run-line">$ <b>trueset reconcile</b> --data warehouse.csv --checks reconcile.yml --ref source=source.csv</p>
+  </section>
+
+  <section class="section">
+    <div class="sec-eyebrow">What you get</div>
+    <h2>Four things, done plainly.</h2>
+    <div class="grid">
+      <div class="feat">
+        <h3><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/><path d="M11 7h4a2 2 0 0 1 2 2v4"/></svg>Portable</h3>
+        <p>One backend protocol. Write a check once; run it on pandas, DuckDB, Postgres, or Snowflake with no rewrites. Verified identical across engines by the test suite.</p>
+      </div>
+      <div class="feat">
+        <h3><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6"/></svg>Reconciliation</h3>
+        <p>Row-count parity, referential integrity, and value parity across two systems — the cross-system checks single-source tools can’t express.</p>
+      </div>
+      <div class="feat">
+        <h3><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 5l-7 7 7 7"/><path d="M20 12H7"/></svg>Shift-left</h3>
+        <p>Validate in flight, before data lands. Block a bad batch, or quarantine the failing rows and keep the clean ones moving downstream.</p>
+      </div>
+      <div class="feat">
+        <h3><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l7 3v5c0 4.4-3 7.6-7 9-4-1.4-7-4.6-7-9V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg>Auditable</h3>
+        <p>Deterministic results as JSON. Tag checks with owner, sensitivity, and regulation for policy reports you can hand an auditor.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="close">
+    <h2>Install trueset</h2>
+    <div class="cta">
+      <button class="chip" data-copy="pip install trueset" style="font-size:15px;padding:11px 16px">$ pip install trueset <span class="cp">COPY</span></button>
+    </div>
+    <p class="sub">Apache-2.0 · runs anywhere Python runs · <a href="docs/">read the docs →</a></p>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <span>true<span style="color:var(--teal-ink)">set</span> — data quality &amp; reconciliation</span>
+    <span class="sp"></span>
+    <a href="docs/">Docs</a>
+    <a href="https://github.com/trueset-dev/trueset">GitHub</a>
+    <a href="https://pypi.org/project/trueset/">PyPI</a>
+    <span>Apache-2.0</span>
+  </div>
+</footer>
+
+<script>
+  document.querySelectorAll('[data-copy]').forEach(function(el){
+    el.addEventListener('click',function(){
+      navigator.clipboard && navigator.clipboard.writeText(el.dataset.copy);
+      var cp=el.querySelector('.cp'); if(!cp)return;
+      var t=cp.textContent; cp.textContent='COPIED'; setTimeout(function(){cp.textContent=t},1200);
+    });
+  });
+</script>
+</body>
+</html>

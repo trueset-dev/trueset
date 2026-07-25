@@ -11,3 +11,4 @@ venv/
 
 # mkdocs build output
 site/
+_site/

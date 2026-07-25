@@ -1,16 +1,19 @@
 name: docs
 
-# Builds the mkdocs site and deploys it to GitHub Pages on every push to main.
-# Enable once in the repo: Settings → Pages → Build and deployment → Source =
-# "Deploy from a branch" → branch "gh-pages" (created by this workflow).
+# Publishes the site to GitHub Pages on push to main:
+#   /            -> the custom landing page (web/)
+#   /docs/       -> the mkdocs documentation
+# Keeps the existing Pages setting: Deploy from branch "gh-pages" / (root).
 
 on:
   push:
     branches: [main]
     paths:
       - "docs/**"
+      - "web/**"
       - "mkdocs.yml"
       - ".github/workflows/docs.yml"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -24,4 +27,19 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install ".[docs]"
-      - run: mkdocs gh-deploy --force --no-history
+
+      - name: Build combined site (landing at root, docs at /docs)
+        run: |
+          rm -rf _site
+          mkdocs build --strict --site-dir _site/docs
+          cp -r web/. _site/
+          touch _site/.nojekyll
+
+      - name: Publish to gh-pages
+        run: |
+          cd _site
+          git init -q -b gh-pages
+          git add -A
+          git -c user.name="docs-bot" -c user.email="docs@trueset.dev" \
+              commit -q -m "deploy docs ${{ github.sha }}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" gh-pages

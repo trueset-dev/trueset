@@ -1,6 +1,6 @@
 site_name: trueset
 site_description: Catch the data problems every other check misses — cross-system reconciliation and portable data quality.
-site_url: https://trueset-dev.github.io/trueset/
+site_url: https://trueset-dev.github.io/trueset/docs/
 repo_url: https://github.com/trueset-dev/trueset
 repo_name: trueset-dev/trueset
 edit_uri: edit/main/docs/
