@@ -205,6 +205,14 @@ class SQLAlchemyBackend:
     # can compare two systems. They materialize the projected columns (not the
     # whole table); a same-engine pushdown optimization is future work.
 
+    def fetch_columns(self, columns: Sequence[str]):
+        import pandas as pd
+
+        cols = [self._col(c) for c in columns]
+        with self.engine.connect() as conn:
+            rows = conn.execute(select(*cols)).fetchall()
+        return pd.DataFrame(rows, columns=list(columns))
+
     def distinct_values(self, column: str) -> set:
         col = self._col(column)
         with self.engine.connect() as conn:

@@ -178,6 +178,10 @@ class DuckDBBackend:
 
     # -- reconciliation primitives ------------------------------------------- #
 
+    def fetch_columns(self, columns: Sequence[str]):
+        collist = ", ".join(_q(c) for c in columns)
+        return self.con.execute(f"SELECT {collist} FROM {_q(self.table)}").fetchdf()
+
     def distinct_values(self, column: str) -> set:
         rows = self.con.execute(
             f"SELECT DISTINCT {_q(column)} FROM {_q(self.table)} "

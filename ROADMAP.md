@@ -109,7 +109,11 @@ pushdown is the follow-up.**
   a flat-baseline fallback): defensible derivation, not a hand-picked number.
 - ✅ **Adjudication feedback loop** — `Adjudications` records human "valid"
   verdicts (auditable JSON) so future runs stop re-flagging them.
-- ⬜ *Follow-ups:* warehouse pushdown for these; multi-reference corroboration
-  (3+ sources with a support quorum); history-driven recalibration.
+- ✅ **Any-backend corroboration** — `corroboration`/`source_corroboration` run
+  on pandas, DuckDB, or a SQL warehouse via a `fetch_columns` primitive
+  (materializes only the analyzed columns), cross-engine parity tested.
+- ⬜ *Follow-ups:* SQL **aggregate pushdown** of the robust stats (so huge tables
+  don't materialize their columns); multi-reference corroboration (3+ sources
+  with a support quorum); `annotate`/`segment_bounds` on warehouse tables.
 
 <!-- Add new ideas below this line -->

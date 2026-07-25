@@ -75,13 +75,29 @@ def test_corroboration_check_runs_in_a_suite():
     assert result.passed is True  # warn severity: surfaced, not blocking
 
 
-def test_corroboration_errors_on_non_pandas_backend():
-    class FakeSQL:  # no .df attribute
-        name = "sqlish"
+def test_corroboration_errors_on_backend_without_fetch_columns():
+    class FakeBackend:  # doesn't implement the analytical fetch_columns primitive
+        name = "weird"
 
-    r = Corroboration("price", ["volume"]).evaluate(FakeSQL())
+    r = Corroboration("price", ["volume"]).evaluate(FakeBackend())
     assert r.status is Status.ERROR
-    assert "pandas" in r.message
+    assert "fetch_columns" in r.message
+
+
+def test_corroboration_parity_pandas_vs_duckdb():
+    import duckdb
+
+    from trueset import DuckDBBackend, PandasBackend
+
+    df = _spike_df(50.0)  # an uncorroborated spike -> exactly 1 flagged
+    con = duckdb.connect()
+    con.register("src", df)
+    con.execute("CREATE TABLE t AS SELECT * FROM src")
+
+    check = Corroboration("price", ["volume"], severity="warn")
+    pandas_r = check.evaluate(PandasBackend(df))
+    duck_r = check.evaluate(DuckDBBackend(con, "t"))
+    assert pandas_r.failing_rows == duck_r.failing_rows == 1   # identical verdict on any engine
 
 
 # -- 2. annotate-and-flow --------------------------------------------------- #
@@ -197,11 +213,22 @@ def test_source_corroboration_check_resolves_reference_in_suite():
     assert result.passed is True                  # warn: surfaced, not blocking
 
 
-def test_source_corroboration_errors_on_non_pandas_backend():
-    from trueset.ambiguity import SourceCorroboration
+def test_source_corroboration_runs_on_duckdb():
+    import duckdb
 
-    class FakeSQL:
-        name = "sqlish"
+    from trueset import DuckDBBackend, PandasBackend
 
-    r = SourceCorroboration("price", "day", "source_b").evaluate(FakeSQL(), FakeSQL())
-    assert r.status is Status.ERROR and "pandas" in r.message
+    primary, ref = _two_source_frames(source_b_price_at_spike=100.0)  # B denies the spike
+    con = duckdb.connect()
+    con.register("p", primary)
+    con.register("r", ref)
+    con.execute("CREATE TABLE p AS SELECT * FROM p")
+    con.execute("CREATE TABLE r AS SELECT * FROM r")
+
+    suite = Suite.from_dict({"suite": "x", "checks": [
+        {"type": "source_corroboration", "column": "price", "key": "day",
+         "reference": "source_b", "severity": "warn"},
+    ]})
+    pandas_res = suite.run(PandasBackend(primary), references={"source_b": PandasBackend(ref)})
+    duck_res = suite.run(DuckDBBackend(con, "p"), references={"source_b": DuckDBBackend(con, "r")})
+    assert pandas_res.results[0].failing_rows == duck_res.results[0].failing_rows == 1

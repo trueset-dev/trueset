@@ -122,6 +122,9 @@ class PandasBackend:
     # (the data-diff approach) so we never pull full tables locally. For the
     # pandas reference backend we materialize, which is fine at dev scale.
 
+    def fetch_columns(self, columns: Sequence[str]) -> pd.DataFrame:
+        return self.df[list(columns)].copy()
+
     def distinct_values(self, column: str) -> set:
         return set(self.df[column].dropna().tolist())
 

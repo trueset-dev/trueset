@@ -80,3 +80,14 @@ class Backend(Protocol):
         bad rows -- trueset still only identifies them; the caller routes them.
         """
         ...
+
+    def fetch_columns(self, columns: Sequence[str]) -> Any:
+        """Materialize just `columns` as a pandas DataFrame.
+
+        For row-level *analytical* checks (e.g. corroboration) whose statistics
+        need the whole distribution, not a count. It projects only the requested
+        columns -- never the full table -- so an engine can answer without moving
+        everything. (Aggregate pushdown of the statistics themselves is a future
+        optimization for very large tables.)
+        """
+        ...

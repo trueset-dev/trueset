@@ -39,6 +39,25 @@ QUALITY_COLUMN = "_trueset_quality"
 FLAGS_COLUMN = "_trueset_flags"
 
 
+def _needs_columns(backend, cols, check_type, severity, column, side):
+    """Validate a backend can supply `cols` for an analytical check; return an
+    ERROR CheckResult if not, else None. Lets corroboration run on any backend
+    that implements `fetch_columns` (pandas/DuckDB/SQLAlchemy today)."""
+    if not hasattr(backend, "fetch_columns"):
+        return CheckResult(
+            check=check_type, status=Status.ERROR, severity=severity, column=column,
+            message=f"{check_type}: backend '{getattr(backend, 'name', '?')}' does "
+                    "not support fetch_columns (needed for analytical checks)",
+        )
+    missing = [c for c in cols if c not in set(backend.columns())]
+    if missing:
+        return CheckResult(
+            check=check_type, status=Status.ERROR, severity=severity, column=column,
+            message=f"{check_type}: missing {side} column(s) {missing}",
+        )
+    return None
+
+
 # --------------------------------------------------------------------------- #
 # 1. Corroboration -- is a suspicious value supported by related signals?
 # --------------------------------------------------------------------------- #
@@ -185,23 +204,19 @@ class SourceCorroboration(ReconciliationCheck):
         self.rel_tol = rel_tol
 
     def evaluate(self, backend: Any, ref_backend: Any) -> CheckResult:
-        df = getattr(backend, "df", None)
-        rdf = getattr(ref_backend, "df", None)
-        if df is None or rdf is None:  # SQL/warehouse backends: not yet supported
-            return CheckResult(
-                check=self.type, status=Status.ERROR, severity=self.severity,
-                column=self.column,
-                message="source_corroboration currently requires the in-memory "
-                        "(pandas) backend; warehouse pushdown is on the roadmap",
-            )
-        try:
-            res = source_corroboration_flags(
-                df, rdf, self.column, self.key, self.ref_column,
-                self.ref_key, self.z, self.rel_tol,
-            )
-        except KeyError as exc:
-            return CheckResult(check=self.type, status=Status.ERROR,
-                               severity=self.severity, column=self.column, message=str(exc))
+        ref_column = self.ref_column or self.column
+        ref_key = self.ref_key or self.key
+        sides = ((backend, [self.column, self.key], "primary"),
+                 (ref_backend, [ref_column, ref_key], "reference"))
+        for be, cols, side in sides:
+            err = _needs_columns(be, cols, self.type, self.severity, self.column, side)
+            if err is not None:
+                return err
+        df = backend.fetch_columns([self.column, self.key])
+        rdf = ref_backend.fetch_columns([ref_column, ref_key])
+        res = source_corroboration_flags(
+            df, rdf, self.column, self.key, ref_column, ref_key, self.z, self.rel_tol,
+        )
         bad = res.n_flagged
         return CheckResult(
             check=self.type,
@@ -254,22 +269,15 @@ class Corroboration(Check):
         self.directional = directional
 
     def evaluate(self, backend: Any) -> CheckResult:
-        df = getattr(backend, "df", None)
-        if df is None:  # SQL/warehouse backends: not yet supported
-            return CheckResult(
-                check=self.type, status=Status.ERROR, severity=self.severity,
-                column=self.column,
-                message="corroboration currently requires the in-memory (pandas) "
-                        "backend; warehouse pushdown is on the roadmap",
-            )
-        try:
-            res = corroboration_flags(
-                df, self.column, self.corroborate_with, self.z,
-                self.support_z, self.min_support, self.directional,
-            )
-        except KeyError as exc:
-            return CheckResult(check=self.type, status=Status.ERROR,
-                               severity=self.severity, column=self.column, message=str(exc))
+        cols = [self.column, *self.corroborate_with]
+        err = _needs_columns(backend, cols, self.type, self.severity, self.column, "primary")
+        if err is not None:
+            return err
+        df = backend.fetch_columns(cols)
+        res = corroboration_flags(
+            df, self.column, self.corroborate_with, self.z,
+            self.support_z, self.min_support, self.directional,
+        )
         bad = res.n_flagged
         return CheckResult(
             check=self.type,

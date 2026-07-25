@@ -387,8 +387,11 @@ to **surface and quantify** the ambiguity, not pretend to resolve it.
   `segment_bounds(df, "price", "region")`, so a legitimate regime isn't judged by
   another's. All of it rests on robust statistics (`stats.robust_z` / MAD).
 
-Runnable: [`examples/ambiguity_demo.py`](examples/ambiguity_demo.py). (In-memory
-today; warehouse pushdown is on the [roadmap](ROADMAP.md).)
+Runnable: [`examples/ambiguity_demo.py`](examples/ambiguity_demo.py). The
+`corroboration` / `source_corroboration` checks run on **any backend** (pandas,
+DuckDB, or a SQL warehouse) — they materialize only the analyzed columns, proven
+identical across engines. (`annotate` / `segment_bounds` operate on an in-memory
+DataFrame.)
 
 ## Works with your stack (dbt today)
 

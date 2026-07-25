@@ -7,6 +7,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **Corroboration runs on any backend now.** New `fetch_columns(columns)` protocol
+  primitive (pandas/DuckDB/SQLAlchemy, cross-engine parity tested) materializes
+  *only the analyzed columns* — so the `corroboration` and `source_corroboration`
+  checks work against DuckDB and any SQL warehouse, not just in-memory pandas.
+  (It projects the needed columns rather than the whole table; pushing the robust
+  statistics down as SQL aggregates is a future optimization for very large tables.)
 - **Cross-source corroboration** — a new `source_corroboration` check (+
   `source_corroboration_flags()`) that answers *"do 2+ sources agree?"*. For each
   outlier in the primary, it looks up the join key in a **reference source** and
