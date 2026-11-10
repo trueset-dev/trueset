@@ -17,6 +17,7 @@ import json
 from collections import defaultdict
 from datetime import datetime, timezone
 
+from ._warehouse_logos import WAREHOUSES
 from .monitoring import detect_anomaly
 
 TEAL = "#0F766E"
@@ -59,6 +60,35 @@ def _icon(name):
 
 def _band(score):
     return GOOD if score >= 95 else WARN if score >= 80 else FAIL
+
+
+def _connect_block(source):
+    """The honest 'Runs on any warehouse' reference: real brand marks + the
+    SQLAlchemy URL scheme for each (click to copy). It does NOT connect -- the
+    dashboard is a static file -- it shows how the same checks scale to a
+    warehouse. The list is illustrative; any SQLAlchemy dialect works."""
+    rows = "".join(
+        f'<li data-copy="{html.escape(copy)}"><span class="wh" style="background:{bg}">'
+        f'<svg viewBox="0 0 24 24" fill="{fill}"><path d="{d}"/></svg></span>'
+        f'<span class="wh-nm">{name}</span><code class="wh-url">{scheme}</code></li>'
+        for name, scheme, copy, bg, fill, d in WAREHOUSES
+    )
+    return (
+        '<div class="connect"><button class="connect-btn" id="connectBtn" type="button" aria-expanded="false">'
+        '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+        'stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/>'
+        '<path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>'
+        'Runs on any warehouse</button>'
+        '<div class="connect-pop" id="connectPop">'
+        '<div class="cp-title">Works with any SQL warehouse</div>'
+        f'<div class="cp-sub">You’re viewing a local <b>{html.escape(source)}</b> store. The same checks '
+        'run in-place on any SQLAlchemy database, pushed down as SQL. Popular ones '
+        '(click to copy a URL scheme):</div>'
+        f'<ul class="cp-list">{rows}</ul>'
+        '<div class="cp-foot">…and any other SQLAlchemy dialect (MySQL, SQL Server, Oracle, '
+        'ClickHouse…). Checks run in place — <b>data never leaves the warehouse.</b></div>'
+        '</div></div>'
+    )
 
 
 def _age_h(iso):
@@ -218,7 +248,8 @@ def build_dashboard_html(store, limit=400):
         empty = ('<div class="empty"><h2>No runs yet</h2><p>Save a run, then refresh:</p>'
                  "<pre>trueset run --data orders.csv --checks checks.yml \\\n"
                  "  --save sqlite:///trueset_history.db</pre></div>")
-        return _PAGE.format(generated=generated, source=source, score="—", delta="", trustchart="",
+        return _PAGE.format(generated=generated, source=source, connect=_connect_block(source),
+                            score="—", delta="", trustchart="",
                             range="", kpis="", checkschart="", volchart="", flow=empty, dims="",
                             rows="", incidents="", **nav)
 
@@ -380,7 +411,8 @@ def build_dashboard_html(store, limit=400):
         inc_html = '<div class="allclear">✓ No open incidents — every monitored dataset is healthy.</div>'
 
     return _PAGE.format(
-        generated=generated, source=source, score=score, delta=_delta(trust_delta),
+        generated=generated, source=source, connect=_connect_block(source),
+        score=score, delta=_delta(trust_delta),
         trustchart=_area_chart(trust_series, TEAL), range=span, kpis=kpis,
         checkschart=_stack_bars(checks_series), volchart=_vol_bars(vol_series),
         flow=flow, dims=dims, rows=rows, incidents=inc_html, **nav)
@@ -508,23 +540,7 @@ _PAGE = """<!doctype html>
    <div class="topbar"><h1>Data Trust</h1><span class="sub">Health of every monitored dataset</span>
      <div class="tb-right" style="margin-left:auto">
        <span class="upd"><b>Updated</b> {generated}</span>
-       <div class="connect">
-         <button class="connect-btn" id="connectBtn" type="button" aria-expanded="false">
-           <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Connect warehouse</button>
-         <div class="connect-pop" id="connectPop">
-           <div class="cp-title">Runs on any warehouse</div>
-           <div class="cp-sub">Reading <b>{source}</b> &mdash; a local seed. Point a run (<code>--url</code>) or a shared store (<code>--store</code>) at your stack:</div>
-           <ul class="cp-list">
-             <li data-copy="snowflake://user:pwd@account/db"><span class="wh" style="background:#29B5E8"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><line x1="12" y1="3" x2="12" y2="21"/><line x1="4.2" y1="7.5" x2="19.8" y2="16.5"/><line x1="19.8" y1="7.5" x2="4.2" y2="16.5"/></svg></span><span class="wh-nm">Snowflake</span><code class="wh-url">snowflake://</code></li>
-             <li data-copy="bigquery://project/dataset"><span class="wh" style="background:#4285F4">BQ</span><span class="wh-nm">BigQuery</span><code class="wh-url">bigquery://</code></li>
-             <li data-copy="databricks://token:***@host/http_path"><span class="wh" style="background:#FF3621">Db</span><span class="wh-nm">Databricks</span><code class="wh-url">databricks://</code></li>
-             <li data-copy="redshift+psycopg2://user:pwd@host:5439/db"><span class="wh" style="background:#8C4FFF">Rs</span><span class="wh-nm">Redshift</span><code class="wh-url">redshift://</code></li>
-             <li data-copy="postgresql+psycopg://user:pwd@host:5432/db"><span class="wh" style="background:#336791">Pg</span><span class="wh-nm">Postgres</span><code class="wh-url">postgresql://</code></li>
-             <li data-copy="duckdb:///warehouse.db"><span class="wh" style="background:#FCC419;color:#1A1A1A">DD</span><span class="wh-nm">DuckDB</span><code class="wh-url">duckdb:///</code></li>
-           </ul>
-           <div class="cp-foot">Same checks, pushed down as SQL &mdash; data never leaves the warehouse.</div>
-         </div>
-       </div>
+       {connect}
      </div></div>
    <section class="panel hero">
      <div class="hero-top"><div><div class="hero-lbl">Data Trust Score</div>

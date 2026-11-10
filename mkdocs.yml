@@ -57,6 +57,7 @@ markdown_extensions:
 
 nav:
   - Home: index.md
+  - How it fits your stack: how-it-fits.md
   - Getting started: getting-started.md
   - Test drive (end-to-end): test-drive.md
   - Guides:
