@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 📖 Documentation
+    url: https://trueset-dev.github.io/trueset/docs/
+    about: Guides and the full reference — check here first.
+  - name: 🚗 Test drive (end-to-end)
+    url: https://trueset-dev.github.io/trueset/docs/test-drive/
+    about: Run trueset start to finish (file → reconciliation → warehouse → dbt → quarantine → dashboard).
+  - name: 🧭 Architecture & contributing
+    url: https://github.com/trueset-dev/trueset/blob/main/ARCHITECTURE.md
+    about: How the code fits together and how to add a check or a backend.

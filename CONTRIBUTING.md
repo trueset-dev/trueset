@@ -3,6 +3,14 @@
 Thanks for helping build trueset. This project is small on purpose -- the core
 `Backend` protocol is the moat and should stay tiny.
 
+**New here? Read [ARCHITECTURE.md](ARCHITECTURE.md) first** — it explains the one
+bet the whole codebase rests on and maps every module. It also has step-by-step
+recipes for the two most common contributions: *add a check* and *add a backend*.
+
+Looking for something to pick up? Issues labelled
+[`good first issue`](https://github.com/trueset-dev/trueset/labels/good%20first%20issue)
+are scoped to be a clean first PR.
+
 ## Setup
 
 ```bash
