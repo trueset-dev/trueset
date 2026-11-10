@@ -297,13 +297,23 @@ def build_dashboard_html(store, limit=400):
                               "severity": "error" if fstate == "stale" else "warn",
                               "message": f"data is {_rel(latest['ts']).replace(' ago', ' old')} (SLA 24h)",
                               "ts": latest["ts"], "rank": 0 if fstate == "stale" else 1})
+        # Holistic status. A dataset that passes every check but has an open
+        # condition -- a volume anomaly, or a freshness breach -- is NOT healthy;
+        # it's a Warning, so the table badge matches the incident feed below it.
+        if not latest["passed"]:
+            status = "fail"
+        elif vol_anom or fstate != "fresh":
+            status = "warn"
+        else:
+            status = "pass"
         datasets.append({"suite": suite, "dataset": latest.get("dataset") or suite, "passed": bool(latest["passed"]),
+                         "status": status,
                          "rate": rate, "n_pass": latest["n_pass"], "total": total, "rows": latest["rows"],
                          "quar": latest.get("rows_quarantined"), "age_iso": latest["ts"], "fstate": fstate,
                          "trend": trend, "vol_anom": vol_anom})
 
     score = round(100 * tp / tc) if tc else 100
-    n_healthy = sum(1 for d in datasets if d["passed"])
+    n_healthy = sum(1 for d in datasets if d["status"] == "pass")
     n_ds = len(datasets)
     n_fresh = sum(1 for d in datasets if d["fstate"] == "fresh")
     n_inc = len(incidents)
@@ -336,17 +346,18 @@ def build_dashboard_html(store, limit=400):
     dims = "".join(tiles)
 
     trows = []
+    _ST = {"pass": ("Passing", GOOD), "warn": ("Warning", WARN), "fail": ("Failing", FAIL)}
     for d in datasets:
-        dot = GOOD if d["passed"] else FAIL
+        label, scol = _ST[d["status"]]
         fcol = {"fresh": GOOD, "aging": WARN, "stale": FAIL}[d["fstate"]]
         rows_txt = f'{d["rows"]:,}' if d["rows"] is not None else "—"
         rc_sty = f' style="color:{FAIL}"' if d.get("vol_anom") else ""
         rc_mk = " &#9888;" if d.get("vol_anom") else ""
         quar_txt = f'{d["quar"]:,}' if d["quar"] else ("0" if d["quar"] == 0 else "—")
-        trows.append(f'<tr><td class="t-ds"><span class="s-dot" style="background:{dot}"></span>'
+        trows.append(f'<tr><td class="t-ds"><span class="s-dot" style="background:{scol}"></span>'
                      f'<span>{html.escape(d["dataset"])}<small>{html.escape(d["suite"])}</small></span></td>'
-                     f'<td><span class="tag" style="color:{dot};border-color:{dot}44;background:{dot}14">'
-                     f'{"Passing" if d["passed"] else "Failing"}</span></td>'
+                     f'<td><span class="tag" style="color:{scol};border-color:{scol}44;background:{scol}14">'
+                     f'{label}</span></td>'
                      f'<td class="t-num" style="color:{_band(d["rate"] * 100)}">{round(d["rate"] * 100)}%</td>'
                      f'<td><span class="fresh" style="color:{fcol}">{_rel(d["age_iso"])}</span></td>'
                      f'<td class="t-num t-dim"{rc_sty}>{rows_txt}{rc_mk}</td><td class="t-num t-dim">{quar_txt}</td>'
@@ -402,6 +413,25 @@ _PAGE = """<!doctype html>
  .topbar{{display:flex;align-items:baseline;gap:13px;margin-bottom:22px}}
  .topbar h1{{margin:0;font-size:23px;font-weight:700;letter-spacing:-.7px}} .topbar .sub{{color:var(--text-2);font-size:14px}}
  .topbar .right{{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--muted)}} .topbar .right b{{color:var(--text-2);font-weight:500}}
+ .tb-right{{display:flex;align-items:center;gap:14px;flex-wrap:wrap}}
+ .upd{{font-family:var(--mono);font-size:12px;color:var(--muted)}} .upd b{{color:var(--text-2);font-weight:500}}
+ .connect{{position:relative}}
+ .connect-btn{{display:inline-flex;align-items:center;gap:7px;font-family:var(--sans);font-size:12.5px;font-weight:600;color:var(--text-2);background:var(--panel);border:1px solid var(--border);border-radius:9px;padding:7px 12px;cursor:pointer;box-shadow:var(--sh);transition:background .12s,color .12s,border-color .12s}}
+ .connect-btn:hover,.connect-btn[aria-expanded="true"]{{color:var(--teal);border-color:rgba(15,118,110,.4);background:rgba(15,118,110,.06)}}
+ .connect-btn .ic{{width:15px;height:15px}}
+ .connect-pop{{position:absolute;top:calc(100% + 9px);right:0;width:332px;max-width:88vw;background:var(--panel);border:1px solid var(--border);border-radius:14px;box-shadow:0 12px 44px -10px rgba(17,24,39,.3);padding:15px;opacity:0;visibility:hidden;transform:translateY(-6px);transition:opacity .15s,transform .15s,visibility .15s;z-index:40;text-align:left}}
+ .connect-pop.open{{opacity:1;visibility:visible;transform:none}}
+ .cp-title{{font-size:14px;font-weight:700}}
+ .cp-sub{{color:var(--text-2);font-size:12px;line-height:1.5;margin:4px 0 12px}}
+ .cp-sub code{{font-family:var(--mono);font-size:11px;background:var(--surface);padding:1px 5px;border-radius:5px;color:var(--teal)}}
+ .cp-list{{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:1px}}
+ .cp-list li{{display:flex;align-items:center;gap:11px;padding:8px;border-radius:9px;cursor:pointer}}
+ .cp-list li:hover{{background:var(--surface)}}
+ .wh{{width:26px;height:26px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:10.5px;letter-spacing:-.3px;flex:none}}
+ .wh svg{{width:15px;height:15px}}
+ .wh-nm{{font-size:13px;font-weight:600;flex:1}}
+ .wh-url{{font-family:var(--mono);font-size:11px;color:var(--muted)}}
+ .cp-foot{{margin-top:12px;padding-top:11px;border-top:1px solid var(--border);color:var(--muted);font-size:11.5px;line-height:1.45}}
  .panel{{background:var(--panel);border:1px solid var(--border);border-radius:16px;box-shadow:var(--sh2)}}
  .pad{{padding:22px 24px}}
  .hero{{margin-bottom:16px;overflow:hidden;padding-bottom:6px}}
@@ -476,7 +506,26 @@ _PAGE = """<!doctype html>
  </aside>
  <main id="top">
    <div class="topbar"><h1>Data Trust</h1><span class="sub">Health of every monitored dataset</span>
-     <span class="right"><b>Updated</b> {generated}</span></div>
+     <div class="tb-right" style="margin-left:auto">
+       <span class="upd"><b>Updated</b> {generated}</span>
+       <div class="connect">
+         <button class="connect-btn" id="connectBtn" type="button" aria-expanded="false">
+           <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Connect warehouse</button>
+         <div class="connect-pop" id="connectPop">
+           <div class="cp-title">Runs on any warehouse</div>
+           <div class="cp-sub">Reading <b>{source}</b> &mdash; a local seed. Point a run (<code>--url</code>) or a shared store (<code>--store</code>) at your stack:</div>
+           <ul class="cp-list">
+             <li data-copy="snowflake://user:pwd@account/db"><span class="wh" style="background:#29B5E8"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><line x1="12" y1="3" x2="12" y2="21"/><line x1="4.2" y1="7.5" x2="19.8" y2="16.5"/><line x1="19.8" y1="7.5" x2="4.2" y2="16.5"/></svg></span><span class="wh-nm">Snowflake</span><code class="wh-url">snowflake://</code></li>
+             <li data-copy="bigquery://project/dataset"><span class="wh" style="background:#4285F4">BQ</span><span class="wh-nm">BigQuery</span><code class="wh-url">bigquery://</code></li>
+             <li data-copy="databricks://token:***@host/http_path"><span class="wh" style="background:#FF3621">Db</span><span class="wh-nm">Databricks</span><code class="wh-url">databricks://</code></li>
+             <li data-copy="redshift+psycopg2://user:pwd@host:5439/db"><span class="wh" style="background:#8C4FFF">Rs</span><span class="wh-nm">Redshift</span><code class="wh-url">redshift://</code></li>
+             <li data-copy="postgresql+psycopg://user:pwd@host:5432/db"><span class="wh" style="background:#336791">Pg</span><span class="wh-nm">Postgres</span><code class="wh-url">postgresql://</code></li>
+             <li data-copy="duckdb:///warehouse.db"><span class="wh" style="background:#FCC419;color:#1A1A1A">DD</span><span class="wh-nm">DuckDB</span><code class="wh-url">duckdb:///</code></li>
+           </ul>
+           <div class="cp-foot">Same checks, pushed down as SQL &mdash; data never leaves the warehouse.</div>
+         </div>
+       </div>
+     </div></div>
    <section class="panel hero">
      <div class="hero-top"><div><div class="hero-lbl">Data Trust Score</div>
        <div class="hero-score"><span class="n">{score}%</span>{delta}</div></div>
@@ -516,5 +565,14 @@ _PAGE = """<!doctype html>
    p.addEventListener('mouseenter',()=>{{const r=p.getBoundingClientRect();tip.textContent=p.dataset.v;
      tip.style.left=(r.left+r.width/2)+'px';tip.style.top=r.top+'px';tip.style.opacity=1;}});
    p.addEventListener('mouseleave',()=>tip.style.opacity=0);}});
+ const cb=document.getElementById('connectBtn'),cp=document.getElementById('connectPop');
+ if(cb){{
+   cb.addEventListener('click',e=>{{e.stopPropagation();const o=cp.classList.toggle('open');cb.setAttribute('aria-expanded',o);}});
+   document.addEventListener('click',e=>{{if(!cp.contains(e.target)&&!cb.contains(e.target)){{cp.classList.remove('open');cb.setAttribute('aria-expanded','false');}}}});
+   cp.querySelectorAll('li').forEach(li=>li.addEventListener('click',()=>{{
+     const u=li.getAttribute('data-copy');if(navigator.clipboard)navigator.clipboard.writeText(u);
+     const el=li.querySelector('.wh-url'),t=el.textContent;el.textContent='✓ copied';
+     setTimeout(()=>{{el.textContent=t;}},1200);}}));
+ }}
 </script>
 </body></html>"""
