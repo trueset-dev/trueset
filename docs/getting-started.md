@@ -4,7 +4,7 @@
 
 ```bash
 pip install trueset          # core (pandas)
-pip install "trueset[sql]"   # + DuckDB / SQLAlchemy warehouses
+pip install "trueset[sql]"   # + SQLAlchemy warehouses (Snowflake, BigQuery, Postgres…) + DuckDB
 ```
 
 Requires Python 3.10+.

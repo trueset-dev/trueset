@@ -53,6 +53,7 @@ RUNS = Table(
     Column("n_pass", Integer),
     Column("n_fail", Integer),
     Column("n_error", Integer),
+    Column("rows_quarantined", Integer, nullable=True),  # distinct bad rows rerouted
 )
 
 RESULTS = Table(
@@ -102,8 +103,14 @@ class ResultStore:
         dataset: str | None = None,
         run_id: str | None = None,
         at: str | None = None,
+        rows_quarantined: int | None = None,
     ) -> str:
-        """Persist one run; returns its run_id."""
+        """Persist one run; returns its run_id.
+
+        `rows_quarantined` is the count of distinct bad rows rerouted to a
+        dead-letter sink (e.g. from `split()` / `run --quarantine`), recorded so
+        the dashboard can show the shift-left flow. None when not quarantining.
+        """
         run_id = run_id or uuid.uuid4().hex
         ts = at or _utcnow_iso()
         counts = result.counts
@@ -119,6 +126,7 @@ class ResultStore:
                     n_pass=counts["pass"],
                     n_fail=counts["fail"],
                     n_error=counts["error"],
+                    rows_quarantined=rows_quarantined,
                 )
             )
             rows = [

@@ -6,6 +6,27 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **`trueset dashboard`** — a self-contained, local "Data Trust" dashboard generated
+  from your results history: a trust score + trend chart, the shift-left data flow
+  (rows checked vs. rerouted to quarantine), health by quality dimension (freshness
+  as an SLA, completeness, validity, uniqueness, volume, reconciliation), a dense
+  asset table, and an incident feed that **surfaces volume anomalies** — silent
+  failures that pass every check but whose row volume deviates from its baseline.
+  The open-source seed of the hosted hub. See `docs/guides/dashboard.md`.
+- `run --quarantine` now records the rerouted-row count to the results store
+  (`rows_quarantined` on `trueset_runs`), so the dashboard's data-flow panel
+  reflects real runs, not just estimates.
+- End-to-end **Test drive** walkthrough (`docs/test-drive.md`): file validation →
+  cross-system reconciliation → a live Postgres warehouse → importing dbt tests →
+  quarantine → the dashboard.
+
+### Changed
+- **Positioning: any warehouse, not just DuckDB.** Messaging now leads with any
+  SQLAlchemy-supported warehouse (Snowflake, BigQuery, Databricks, Postgres,
+  Redshift); DuckDB is presented as the zero-setup *local* engine, not the
+  headline. Updated README, landing page, docs, and package metadata/keywords.
+
 ## [0.3.0] - 2026-07-25
 
 ### Added

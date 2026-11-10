@@ -12,3 +12,14 @@ venv/
 # mkdocs build output
 site/
 _site/
+
+# local demo artifacts
+trueset_history.db
+*.db
+trueset-dashboard.html
+_site/
+
+# generated tutorial media (scripts are tracked; rendered output is not)
+tutorials/out/
+*.mp4
+*.aiff

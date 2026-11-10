@@ -58,12 +58,14 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Getting started: getting-started.md
+  - Test drive (end-to-end): test-drive.md
   - Guides:
       - Cross-system reconciliation: guides/reconciliation.md
       - Checks: guides/checks.md
-      - Corroboration & ambiguity: guides/ambiguity.md
       - Backends & warehouses: guides/backends.md
+      - Dashboard: guides/dashboard.md
       - Pipelines & quarantine: guides/pipelines.md
+      - Corroboration & ambiguity: guides/ambiguity.md
       - Governance & classification: guides/governance.md
       - Monitoring & history: guides/monitoring.md
       - Authoring checks: guides/authoring.md

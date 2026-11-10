@@ -6,7 +6,8 @@
 They can't see the failures that matter most: a value that silently changed
 *between* two systems, or an extreme reading that's either a real event or an
 expensive error. trueset is built for exactly those — and every check is written
-once and runs on any engine (pandas, DuckDB, or your warehouse as pushed-down SQL).
+once and runs on any engine — your warehouse as pushed-down SQL (Snowflake, BigQuery,
+Databricks, Postgres, Redshift), or locally on pandas and DuckDB.
 
 ```bash
 pip install trueset

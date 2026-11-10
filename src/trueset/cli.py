@@ -167,12 +167,14 @@ def run(
     suite = _load_suite(checks_path)
     result = suite.run(backend)
 
+    rows_quarantined = None
     if quarantine_path:
         if url:
             raise click.ClickException("--quarantine works with --data files, not --url")
         from .quarantine import split as _split
 
         sp = _split(backend.df, suite)
+        rows_quarantined = sp.n_bad
         sp.bad_annotated().to_csv(quarantine_path, index=False)
         if not as_json:
             console.print(
@@ -181,7 +183,9 @@ def run(
             )
 
     if save_url:
-        run_id = _open_store(save_url).save(result, dataset=result.dataset or data or table)
+        run_id = _open_store(save_url).save(
+            result, dataset=result.dataset or data or table, rows_quarantined=rows_quarantined
+        )
         if not as_json:
             console.print(f"[dim]saved run {run_id} to {save_url}[/]")
 
@@ -573,6 +577,33 @@ def list_checks() -> None:
     """List available check types."""
     for name in available_checks():
         console.print(f"  - {name}")
+
+
+@cli.command()
+@click.option("--store", "store_url", default="sqlite:///trueset_history.db",
+              help="Results store (SQLAlchemy URL) to read [default: sqlite:///trueset_history.db].")
+@click.option("--out", "out_path", default="trueset-dashboard.html",
+              help="Write the dashboard HTML here.")
+@click.option("--open", "open_browser", is_flag=True, help="Open it in your browser.")
+@click.option("--limit", default=200, show_default=True, help="Max recent runs to read.")
+def dashboard(store_url: str, out_path: str, open_browser: bool, limit: int) -> None:
+    """Centralized 'Data Trust' dashboard over your results history.
+
+    Reads runs saved via `trueset run ... --save <store>` and renders one
+    self-contained HTML page: an overall trust score plus a health card per
+    dataset. The local seed of the TrueSet hub.
+    """
+    from .dashboard import build_dashboard_html
+
+    store = _open_store(store_url)
+    html = build_dashboard_html(store, limit=limit)
+    out = Path(out_path)
+    out.write_text(html)
+    console.print(f"[green]wrote[/] {out}  (reading {store_url})")
+    if open_browser:
+        import webbrowser
+
+        webbrowser.open(out.resolve().as_uri())
 
 
 if __name__ == "__main__":
