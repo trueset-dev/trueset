@@ -58,6 +58,7 @@ markdown_extensions:
 nav:
   - Home: index.md
   - How it fits your stack: how-it-fits.md
+  - Trusting volatile data: trusting-volatile-data.md
   - Getting started: getting-started.md
   - Test drive (end-to-end): test-drive.md
   - Guides:
@@ -66,6 +67,7 @@ nav:
       - Backends & warehouses: guides/backends.md
       - Dashboard: guides/dashboard.md
       - Pipelines & quarantine: guides/pipelines.md
+      - Orchestration & CI: guides/orchestration.md
       - Corroboration & ambiguity: guides/ambiguity.md
       - Governance & classification: guides/governance.md
       - Monitoring & history: guides/monitoring.md

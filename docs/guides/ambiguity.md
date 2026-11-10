@@ -11,6 +11,10 @@ event, a market move). A fixed threshold can't tell a real extreme from a mistak
 trueset's job here is to **surface and quantify** the ambiguity, not pretend to
 resolve it.
 
+> New here? Start with the showcase — [Trusting volatile data](../trusting-volatile-data.md)
+> — for the pattern and where it applies (markets, IoT, energy, observability,
+> healthcare, fraud…). This page is the YAML/API reference.
+
 ## Corroboration — is a suspicious value supported?
 
 Judge an outlier against **supporting signals**, not in isolation. A real price

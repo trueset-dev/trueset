@@ -108,6 +108,7 @@ The same `checks.yml` runs unchanged against a warehouse table
 ## Learn more
 
 - [ROADMAP.md](ROADMAP.md) — what's shipped, what's next, the idea inbox
+- [Trusting volatile data](https://trueset-dev.github.io/trueset/docs/trusting-volatile-data/) — data quality where an extreme can be *real* (markets, IoT, energy, observability…)
 - [ARCHITECTURE.md](ARCHITECTURE.md) — how the code fits together; how to add a check or a backend
 - [CHANGELOG.md](CHANGELOG.md) · [examples/](examples/) · [CONTRIBUTING.md](CONTRIBUTING.md)
 
