@@ -13,8 +13,11 @@ At run time the Suite resolves that name to a concrete backend and passes it in.
 
 from __future__ import annotations
 
+import math
 from abc import abstractmethod
 from collections.abc import Sequence
+
+import pandas as pd
 
 from .backends.base import Backend
 from .checks import Check, register
@@ -116,6 +119,7 @@ class ValueParity(ReconciliationCheck):
         reference: str,
         ref_key: str | None = None,
         ref_columns: Sequence[str] | None = None,
+        tolerance: float = 0.0,
         **kw,
     ):
         super().__init__(reference, **kw)
@@ -123,6 +127,10 @@ class ValueParity(ReconciliationCheck):
         self.columns = list(columns)
         self.ref_key = ref_key or key
         self.ref_columns = list(ref_columns) if ref_columns else list(columns)
+        # Numeric tolerance for value comparison. Even at 0, values are compared
+        # type-aware (Decimal('10.00') == 10.0 == '10.0'), so cross-engine type
+        # drift doesn't read as a mismatch; raise it to absorb rounding.
+        self.tolerance = float(tolerance)
 
     def evaluate(self, backend: Backend, ref_backend: Backend) -> CheckResult:
         for be, col, side in (
@@ -146,7 +154,7 @@ class ValueParity(ReconciliationCheck):
 
         a_keys, b_keys = set(a), set(b)
         common = a_keys & b_keys
-        mismatched = sum(1 for k in common if a[k] != b[k])
+        mismatched = sum(1 for k in common if not _rows_equal(a[k], b[k], self.tolerance))
         only_primary = len(a_keys - b_keys)
         only_reference = len(b_keys - a_keys)
         failing = (
@@ -192,3 +200,55 @@ def _duplicate_keys(backend: Backend, key: str) -> int:
     """
     non_null = backend.row_count() - backend.null_count(key)
     return max(0, non_null - backend.distinct_count(key))
+
+
+def _is_missing(v) -> bool:
+    if v is None:
+        return True
+    try:
+        return bool(pd.isna(v))
+    except (TypeError, ValueError):  # non-scalar / unorderable -> treat as present
+        return False
+
+
+def _as_number(v):
+    """float(v) if v is numeric-like (int/float/Decimal/numpy/numeric string), else None.
+
+    bools are left un-coerced so they're never pulled into tolerance math; an
+    exact bool-vs-int (True/1) still matches via the `==` fallback.
+    """
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, str):
+        try:
+            return float(v.strip())
+        except ValueError:
+            return None
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    return None if math.isnan(f) else f
+
+
+def _values_equal(x, y, tol: float) -> bool:
+    """Type- and tolerance-aware equality for a single compared value.
+
+    Removes cross-engine false mismatches: `Decimal('10.00')`, `10.0` and `'10.0'`
+    are equal; two missing values (None/NaN) are equal while one missing differs;
+    numbers within `tol` are equal. Anything non-numeric falls back to `==`.
+    """
+    mx, my = _is_missing(x), _is_missing(y)
+    if mx or my:
+        return mx and my
+    nx, ny = _as_number(x), _as_number(y)
+    if nx is not None and ny is not None:
+        return abs(nx - ny) <= tol
+    return x == y
+
+
+def _rows_equal(ta, tb, tol: float) -> bool:
+    """Compare two tuples of per-column values element-wise."""
+    return len(ta) == len(tb) and all(
+        _values_equal(x, y, tol) for x, y in zip(ta, tb, strict=True)
+    )

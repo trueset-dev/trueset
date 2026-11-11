@@ -65,6 +65,21 @@ checks:
     Two datasets can have identical counts and completely different rows. That's
     exactly why `value_parity` and `referential_integrity` exist alongside it.
 
+### Comparing across engines: type drift and tolerance
+
+Values are compared **type-aware**, so cross-engine storage differences don't
+read as false mismatches: `Decimal('10.00')` (a warehouse `NUMERIC`), `10.0` (a
+CSV float) and `'10.0'` (text) are equal, and two missing values (`NULL`/`NaN`)
+are equal while one-missing differs. For rounding, add an absolute `tolerance`:
+
+```yaml
+  - type: value_parity
+    key: order_id
+    columns: [amount]
+    reference: source
+    tolerance: 0.01          # amounts within 1 cent are considered equal
+```
+
 ## Reconcile two SQL systems directly
 
 Both the primary and the references can be live SQL tables — reconcile a warehouse

@@ -57,8 +57,9 @@ trueset reconcile \
   `referential_integrity` sends the distinct keys back as an `IN (...)` list.
   Watch RSS and wall-clock as `--rows` grows — this is the known scaling limit
   the roadmap targets (same-engine SQL-join pushdown; cross-engine hashing).
-- **Type fidelity:** CSV reads `amount` as float; a warehouse might store it as
-  `NUMERIC`. Exact comparison can surface type/rounding drift as false
-  mismatches — another reason tolerance + type normalization is on the list.
+- **Type fidelity:** CSV reads `amount` as float; a warehouse stores it as
+  `NUMERIC`. `value_parity` now compares **type-aware** (Decimal / float / numeric
+  string and NULL/NaN are normalized) and takes a `tolerance:` for rounding — so
+  this no longer shows up as a false mismatch.
 
 > The generated files live in `_data/` and are git-ignored.

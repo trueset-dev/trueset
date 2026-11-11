@@ -26,6 +26,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and the runnable `examples/airflow_dq_dag.py` / `examples/dagster_dq_check.py`.
 
 ### Changed
+- **`value_parity` compares values type-aware, with an optional `tolerance`.**
+  Cross-engine storage differences no longer read as false mismatches:
+  `Decimal('10.00')`, `10.0` and `'10.0'` are equal; two missing values
+  (NULL/NaN) are equal while one-missing differs; `tolerance: <n>` absorbs
+  rounding. (Previously an exact `!=`, which flagged warehouse `NUMERIC` vs CSV
+  `float` as a mismatch.)
 - **Positioning: any warehouse, not just DuckDB.** Messaging now leads with any
   SQLAlchemy-supported warehouse (Snowflake, BigQuery, Databricks, Postgres,
   Redshift); DuckDB is presented as the zero-setup *local* engine, not the

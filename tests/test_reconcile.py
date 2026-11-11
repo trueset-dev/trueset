@@ -89,3 +89,53 @@ def test_missing_reference_is_error_not_crash(warehouse):
     result = suite.run(warehouse, references={})
     assert result.results[0].status is Status.ERROR
     assert "not provided" in result.results[0].message
+
+
+# --- type- and tolerance-aware value comparison (cross-engine false mismatches) ---
+
+from decimal import Decimal  # noqa: E402
+
+import numpy as np  # noqa: E402
+
+from trueset.reconcile import _values_equal  # noqa: E402
+
+
+def _mismatches(primary_df, ref_df, columns=("amount",), **kw):
+    chk = ValueParity(key="id", columns=list(columns), reference="ref", **kw)
+    res = chk.evaluate(PandasBackend(primary_df), PandasBackend(ref_df))
+    return res.observed["mismatched_values"]
+
+
+def test_value_parity_normalizes_numeric_types():
+    # Decimal vs float vs numeric-string must NOT read as a mismatch
+    primary = pd.DataFrame({"id": [1, 2, 3], "amount": [Decimal("10.00"), 20.0, 30.0]})
+    ref = pd.DataFrame({"id": [1, 2, 3], "amount": [10.0, "20.0", 31.0]})
+    assert _mismatches(primary, ref) == 1          # only id=3 (30 vs 31) truly differs
+
+
+def test_value_parity_tolerance_absorbs_rounding():
+    primary = pd.DataFrame({"id": [1, 2], "amount": [10.0, 20.0]})
+    ref = pd.DataFrame({"id": [1, 2], "amount": [10.4, 20.0]})
+    assert _mismatches(primary, ref) == 1                    # exact: 10.0 != 10.4
+    assert _mismatches(primary, ref, tolerance=0.5) == 0     # within tolerance
+
+
+def test_value_parity_missing_values():
+    primary = pd.DataFrame({"id": [1, 2], "amount": [np.nan, 5.0]})
+    both_nan = pd.DataFrame({"id": [1, 2], "amount": [np.nan, 5.0]})
+    one_val = pd.DataFrame({"id": [1, 2], "amount": [7.0, 5.0]})
+    assert _mismatches(primary, both_nan) == 0     # NaN == NaN
+    assert _mismatches(primary, one_val) == 1      # NaN vs value differs
+
+
+def test_values_equal_helper():
+    assert _values_equal(Decimal("10.00"), 10.0, 0.0)
+    assert _values_equal("10.0", 10.0, 0.0)
+    assert _values_equal(float("nan"), float("nan"), 0.0)
+    assert not _values_equal(float("nan"), 1.0, 0.0)
+    assert _values_equal(True, 1, 0.0)             # exact bool/int type drift is fine
+    assert not _values_equal(True, 1.4, 0.5)       # but bools aren't pulled into tolerance math
+    assert _values_equal(10.0, 10.4, 0.5)
+    assert not _values_equal(10.0, 10.4, 0.0)
+    assert _values_equal("shipped", "shipped", 0.0)
+    assert not _values_equal("shipped", "delivered", 0.0)
