@@ -162,3 +162,37 @@ def test_referential_integrity_sql_pushdown_parity(tmp_path):
 
     assert pandas_res.observed == sql_res.observed == 2
     assert pandas_res.status is Status.FAIL and sql_res.status is Status.FAIL
+
+
+def test_value_parity_sql_pushdown_parity(tmp_path):
+    """Same-engine value_parity (SQL inner-join + anti-joins) must return the
+    identical observed counts as the in-memory key-map path."""
+    from sqlalchemy import create_engine
+
+    from trueset import SQLAlchemyBackend
+
+    primary = pd.DataFrame({
+        "order_id": [1, 2, 3, 4],              # 4 only-in-primary
+        "amount": [10.0, 20.0, 30.0, 40.0],
+        "status": ["a", "b", "x", "d"],        # id 3 status differs
+    })
+    ref = pd.DataFrame({
+        "order_id": [1, 2, 3, 5],              # 5 only-in-reference
+        "amount": [10.0, 20.0, 30.0, 50.0],
+        "status": ["a", "b", "c", "e"],        # id 3: 'c' vs 'x'
+    })
+    chk = ValueParity(key="order_id", columns=["amount", "status"], reference="src")
+    pandas_obs = chk.evaluate(PandasBackend(primary), PandasBackend(ref)).observed
+
+    eng = create_engine(f"sqlite:///{tmp_path / 'vp.db'}")
+    primary.to_sql("warehouse", eng, index=False)
+    ref.to_sql("source", eng, index=False)
+    sql_obs = chk.evaluate(
+        SQLAlchemyBackend(eng, "warehouse"), SQLAlchemyBackend(eng, "source")
+    ).observed
+
+    assert pandas_obs == sql_obs
+    assert sql_obs["mismatched_values"] == 1
+    assert sql_obs["only_in_primary"] == 1
+    assert sql_obs["only_in_reference"] == 1
+    assert sql_obs["compared_keys"] == 3

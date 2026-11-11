@@ -248,6 +248,42 @@ class SQLAlchemyBackend:
         )
         return int(self._scalar(stmt))
 
+    def _key_join(self, ref_backend: SQLAlchemyBackend, key: str, ref_key: str):
+        """An inner join of the two tables on their (non-null) keys."""
+        kcol, rkey = self._col(key), ref_backend._col(ref_key)
+        join = self.table.join(ref_backend.table, kcol == rkey)
+        return join, kcol
+
+    def count_common_keys(self, ref_backend: SQLAlchemyBackend, key: str, ref_key: str) -> int:
+        """Keys present on both sides. Only called when neither side has duplicate
+        keys, so the inner join is 1:1 and this equals the distinct common count."""
+        join, kcol = self._key_join(ref_backend, key, ref_key)
+        return int(self._scalar(select(func.count()).select_from(join).where(kcol.is_not(None))))
+
+    def count_value_mismatches(
+        self,
+        ref_backend: SQLAlchemyBackend,
+        key: str,
+        columns: Sequence[str],
+        ref_key: str,
+        ref_columns: Sequence[str],
+    ) -> int:
+        """Shared keys whose compared columns differ (null-safe, exact).
+
+        A same-engine inner join where ANY (column, ref_column) pair
+        `IS DISTINCT FROM` its counterpart. Pushed down; nothing is materialized.
+        Valid only for exact comparison with no duplicate keys (the caller checks).
+        """
+        join, kcol = self._key_join(ref_backend, key, ref_key)
+        differs = _or([
+            self._col(c).is_distinct_from(ref_backend._col(rc))
+            for c, rc in zip(columns, ref_columns, strict=True)
+        ])
+        stmt = (
+            select(func.count()).select_from(join).where(kcol.is_not(None)).where(differs)
+        )
+        return int(self._scalar(stmt))
+
 
 def _or(conds):
     """OR a list of SQLAlchemy conditions (at least one element)."""

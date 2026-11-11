@@ -148,17 +148,35 @@ class ValueParity(ReconciliationCheck):
         dup_primary = _duplicate_keys(backend, self.key)
         dup_reference = _duplicate_keys(ref_backend, self.ref_key)
 
-        a = backend.key_map(self.key, self.columns)
-        b = ref_backend.key_map(self.ref_key, self.ref_columns)
+        if (
+            self.tolerance == 0
+            and dup_primary == 0
+            and dup_reference == 0
+            and _same_sql_engine(backend, ref_backend)
+        ):
+            # Same database, no duplicate keys, exact compare: push the whole
+            # comparison down as SQL -- an inner join for value mismatches and
+            # anti-joins for only-in-each. No table is pulled into memory, and
+            # the result is identical to the in-memory path below.
+            mismatched = backend.count_value_mismatches(
+                ref_backend, self.key, self.columns, self.ref_key, self.ref_columns
+            )
+            only_primary = backend.count_orphans(self.key, ref_backend, self.ref_key)
+            only_reference = ref_backend.count_orphans(self.ref_key, backend, self.key)
+            compared = backend.count_common_keys(ref_backend, self.key, self.ref_key)
+        else:
+            # Portable path (cross-engine, tolerant, or duplicate keys present):
+            # compare the key + compared columns from each side in memory.
+            a = backend.key_map(self.key, self.columns)
+            b = ref_backend.key_map(self.ref_key, self.ref_columns)
+            a_keys, b_keys = set(a), set(b)
+            common = a_keys & b_keys
+            mismatched = sum(1 for k in common if not _rows_equal(a[k], b[k], self.tolerance))
+            only_primary = len(a_keys - b_keys)
+            only_reference = len(b_keys - a_keys)
+            compared = len(common)
 
-        a_keys, b_keys = set(a), set(b)
-        common = a_keys & b_keys
-        mismatched = sum(1 for k in common if not _rows_equal(a[k], b[k], self.tolerance))
-        only_primary = len(a_keys - b_keys)
-        only_reference = len(b_keys - a_keys)
-        failing = (
-            mismatched + only_primary + only_reference + dup_primary + dup_reference
-        )
+        failing = mismatched + only_primary + only_reference + dup_primary + dup_reference
 
         observed = {
             "mismatched_values": mismatched,
@@ -166,7 +184,7 @@ class ValueParity(ReconciliationCheck):
             "only_in_reference": only_reference,
             "duplicate_keys_primary": dup_primary,
             "duplicate_keys_reference": dup_reference,
-            "compared_keys": len(common),
+            "compared_keys": compared,
         }
         parts = []
         if mismatched:
@@ -185,7 +203,7 @@ class ValueParity(ReconciliationCheck):
             severity=self.severity,
             column=self.key,
             observed=observed,
-            total_rows=len(a),
+            total_rows=only_primary + compared,  # distinct non-null primary keys
             failing_rows=failing,
             message="" if failing == 0 else ", ".join(parts),
         )

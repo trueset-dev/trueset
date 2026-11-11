@@ -26,10 +26,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and the runnable `examples/airflow_dq_dag.py` / `examples/dagster_dq_check.py`.
 
 ### Changed
-- **`referential_integrity` pushes down as an anti-join when both sides share a
-  database** (`NOT EXISTS`), instead of pulling the reference's distinct keys into
-  memory and sending them back as an `IN (...)` list. Cross-engine falls back to
-  the portable path; both return the identical count (parity-tested).
+- **Reconciliation pushes down as SQL when both sides share one database.**
+  `value_parity` (no duplicate keys, exact compare) uses an inner join for value
+  mismatches and anti-joins for only-in-each; `referential_integrity` uses a
+  `NOT EXISTS` anti-join instead of pulling the reference's distinct keys into
+  memory and sending them back as an `IN (...)` list. Across *different* engines
+  (what makes CSV-vs-warehouse checks possible), the portable in-memory path is
+  used. Both paths return identical counts (parity-tested, pandas vs SQLite).
 - **`value_parity` compares values type-aware, with an optional `tolerance`.**
   Cross-engine storage differences no longer read as false mismatches:
   `Decimal('10.00')`, `10.0` and `'10.0'` are equal; two missing values

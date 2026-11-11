@@ -17,11 +17,12 @@ On the SQL backends, **single-table checks** are pushed down as
 move across the wire.
 
 !!! note "Two honest limits"
-    - **Cross-system reconciliation** (`value_parity`, `referential_integrity`)
-      does *not* yet fully push down: it compares the **key and compared
-      columns** from each side (which is what lets the two sides be *different*
-      engines). That's fine at moderate scale; same-engine SQL-join pushdown and
-      cross-engine hashing are on the [roadmap](https://github.com/trueset-dev/trueset/blob/main/ROADMAP.md).
+    - **Cross-system reconciliation:** when both sides share one database,
+      `value_parity` and `referential_integrity` push down as SQL (inner join +
+      anti-joins) — nothing is materialized. Across *different* engines (what
+      makes CSV-vs-warehouse checks possible), they compare the **key + compared
+      columns** in memory; cross-engine hashing to avoid that is on the
+      [roadmap](https://github.com/trueset-dev/trueset/blob/main/ROADMAP.md).
     - **Regex pushdown** (`matches_regex`) is wired for Postgres, Redshift,
       MySQL/MariaDB and SQLite. Other dialects (e.g. Snowflake, BigQuery) raise a
       clear "not yet wired" error for that one check type; everything else runs.

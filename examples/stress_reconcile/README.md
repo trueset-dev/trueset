@@ -52,11 +52,12 @@ trueset reconcile \
 
 - **Correctness:** do the reported counts equal the ground truth? Try bumping
   `--rows` to 5,000,000.
-- **Memory / time:** today, `value_parity` compares the key + compared columns
-  from *both* sides in memory (it does not fully push the join into SQL yet), and
-  `referential_integrity` sends the distinct keys back as an `IN (...)` list.
-  Watch RSS and wall-clock as `--rows` grows — this is the known scaling limit
-  the roadmap targets (same-engine SQL-join pushdown; cross-engine hashing).
+- **Memory / time:** *same-engine* runs (the `--sqlite` path, step 3) push the
+  whole comparison into SQL — inner join for mismatches, anti-joins for
+  only-in-each — so nothing is materialized. *Cross-engine* runs (CSV vs CSV,
+  step 2) still compare the key + compared columns in memory; watch RSS and
+  wall-clock as `--rows` grows there (cross-engine hashing is the roadmap item).
+  The pushdown applies when there are no duplicate keys and no `tolerance:`.
 - **Type fidelity:** CSV reads `amount` as float; a warehouse stores it as
   `NUMERIC`. `value_parity` now compares **type-aware** (Decimal / float / numeric
   string and NULL/NaN are normalized) and takes a `tolerance:` for rounding — so
