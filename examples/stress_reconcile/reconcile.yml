@@ -1,0 +1,21 @@
+suite: warehouse_vs_source_stress
+dataset: warehouse_orders
+
+checks:
+  # counts differ by the planted only-in-* rows
+  - type: row_count_parity
+    reference: source
+    tolerance: 0.0
+
+  # every warehouse order_id should trace back to a source order_id
+  - type: referential_integrity
+    column: order_id
+    reference: source
+    ref_column: order_id
+
+  # join on the key and compare the actual values
+  # (ref_key / ref_columns default to key / columns -- same names on both sides)
+  - type: value_parity
+    key: order_id
+    columns: [amount, status]
+    reference: source

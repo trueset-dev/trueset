@@ -23,3 +23,6 @@ _site/
 tutorials/out/
 *.mp4
 *.aiff
+
+# generated case-study data
+examples/stress_reconcile/_data/
