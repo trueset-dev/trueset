@@ -80,6 +80,16 @@ are equal while one-missing differs. For rounding, add an absolute `tolerance`:
     tolerance: 0.01          # amounts within 1 cent are considered equal
 ```
 
+!!! note "What counts as the same value"
+    Numeric comparison (`Decimal` vs `float` vs numeric text, plus `tolerance`)
+    applies when **at least one side is a real number** — a warehouse `NUMERIC`
+    `19.99` and a CSV float `19.99` match exactly. Two values that are *both*
+    non-numeric text are compared literally, so a leading-zero SKU `'007'` never
+    equals `'7'`. **Mixed non-numeric types** — e.g. a date compared against a
+    differently-formatted date *string* — are compared as text; if your two
+    systems format such a column differently, cast it on one side (or compare a
+    normalized column) rather than relying on automatic coercion.
+
 ## Reconcile two SQL systems directly
 
 Both the primary and the references can be live SQL tables — reconcile a warehouse

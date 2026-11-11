@@ -46,6 +46,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   headline. Updated README, landing page, docs, and package metadata/keywords.
 
 ### Fixed
+- **No more false mismatches on money columns.** A warehouse `NUMERIC` compared
+  against a CSV `float` of the same value (e.g. `Decimal('19.99')` vs `19.99`)
+  was wrongly flagged as a mismatch, because the float isn't exactly
+  representable. Values are now normalized through `Decimal(str(...))`, so the
+  same money value reconciles regardless of how each system stored it. (Mixed
+  *non-numeric* types — e.g. differently-formatted date strings — are compared as
+  text and documented as needing an explicit cast.)
 - **`value_parity` comparison correctness** (found in review of the new code):
   numeric-looking strings are no longer coerced to numbers, so `'007' != '7'` and
   `'1e3' != '1000'` (a leading-zero SKU/zip no longer silently passes); `inf`

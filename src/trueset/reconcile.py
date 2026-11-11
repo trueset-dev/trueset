@@ -17,6 +17,7 @@ import math
 import numbers
 from abc import abstractmethod
 from collections.abc import Sequence
+from decimal import Decimal, InvalidOperation
 
 import pandas as pd
 
@@ -260,46 +261,54 @@ def _is_real_number(v) -> bool:
     return isinstance(v, numbers.Number) and not isinstance(v, bool)
 
 
-def _as_number(v):
-    """float(v) for a number or a numeric string, else None (for tolerance math)."""
+def _to_decimal(v):
+    """Exact Decimal for a real number or numeric string, else None.
+
+    Floats go through ``str`` so money values round-trip: ``Decimal(str(19.99))``
+    is ``Decimal('19.99')``, not the binary-float noise of ``Decimal(19.99)``.
+    inf/nan and non-numeric strings return None.
+    """
     if isinstance(v, bool):
         return None
+    if isinstance(v, Decimal):
+        return None if (v.is_infinite() or v.is_nan()) else v
+    if isinstance(v, int):
+        return Decimal(v)
+    if isinstance(v, float):
+        return None if (math.isinf(v) or math.isnan(v)) else Decimal(str(v))
     try:
-        f = float(v.strip()) if isinstance(v, str) else float(v)
-    except (TypeError, ValueError):
+        d = Decimal(v.strip() if isinstance(v, str) else str(v))
+    except InvalidOperation:
         return None
-    return None if math.isnan(f) else f
+    return None if (d.is_infinite() or d.is_nan()) else d
 
 
 def _values_equal(x, y, tol: float) -> bool:
     """Type- and tolerance-aware equality for a single compared value.
 
-    - **Exact equality first**, so big integers, Decimals, strings and infinities
-      are correct: ``2**53+1 != 2**53``, ``inf == inf``, and ``'007' != '7'``
-      (text is never silently read as a number).
+    - **Exact equality first**, so same-type values (big integers, Decimals,
+      strings, infinities) are correct and fast: ``2**53+1 != 2**53``,
+      ``inf == inf``, ``'007' != '7'`` (text is never read as a number).
     - Two missing values (None/NaN) are equal; one-missing differs.
-    - A real number vs its string form (``'10.0'`` vs ``10.0``) is reconciled, and
-      two real numbers are compared within ``tol``. Numeric coercion only happens
-      when **at least one side is a real number** -- two numeric-looking strings
-      are compared as strings.
+    - Numeric comparison runs only when **at least one side is a real number**,
+      with both sides normalized to ``Decimal`` -- so a warehouse ``NUMERIC`` and a
+      CSV ``float`` of the same money value match (``Decimal('19.99') == 19.99``)
+      and ``tolerance`` absorbs rounding.
     """
     mx, my = _is_missing(x), _is_missing(y)
     if mx or my:
         return mx and my
     try:
-        if x == y:  # exact: ints of any size, Decimal==float, strings, inf
+        if x == y:  # exact, same-type fast path (incl. inf == inf)
             return True
     except TypeError:
         pass
-    x_num, y_num = _is_real_number(x), _is_real_number(y)
-    # a real number vs its string form: coerce the pair and compare
-    if (x_num and isinstance(y, str)) or (y_num and isinstance(x, str)):
-        nx, ny = _as_number(x), _as_number(y)
-        return nx is not None and ny is not None and abs(nx - ny) <= tol
-    # tolerance between two real numbers (float only for the tolerance step)
-    if tol > 0 and x_num and y_num:
-        return abs(float(x) - float(y)) <= tol
-    return False
+    if not (_is_real_number(x) or _is_real_number(y)):
+        return False  # two non-numbers that aren't equal differ ('007' vs '7')
+    dx, dy = _to_decimal(x), _to_decimal(y)
+    if dx is None or dy is None:
+        return False  # a real number vs a non-numeric string, or inf vs finite
+    return abs(dx - dy) <= Decimal(str(tol)) if tol > 0 else dx == dy
 
 
 def _rows_equal(ta, tb, tol: float) -> bool:

@@ -259,3 +259,27 @@ def test_reconcile_table_against_itself(tmp_path):
 
     ri = ReferentialIntegrity(column="child", reference="self", ref_column="id").evaluate(a, b)
     assert ri.observed == 1  # child=9 has no matching id (was silently 0 before)
+
+
+def test_value_parity_decimal_vs_float_money():
+    """A warehouse NUMERIC vs a CSV float of the same money value must not be a
+    false mismatch -- regression for Decimal('19.99') vs 19.99."""
+    primary = pd.DataFrame(
+        {"id": [1, 2, 3], "amt": [Decimal("19.99"), Decimal("5.00"), Decimal("100.10")]}
+    )
+    ref = pd.DataFrame({"id": [1, 2, 3], "amt": [19.99, 5.0, 100.10]})
+    chk = ValueParity(key="id", columns=["amt"], reference="r")
+    assert chk.evaluate(PandasBackend(primary), PandasBackend(ref)).observed[
+        "mismatched_values"
+    ] == 0
+    # a genuine one-cent difference is still caught
+    ref2 = pd.DataFrame({"id": [1, 2, 3], "amt": [19.99, 5.0, 100.11]})
+    assert chk.evaluate(PandasBackend(primary), PandasBackend(ref2)).observed[
+        "mismatched_values"
+    ] == 1
+
+
+def test_values_equal_decimal_money():
+    assert _values_equal(Decimal("19.99"), 19.99, 0.0)
+    assert _values_equal(Decimal("0.1"), 0.1, 0.0)
+    assert not _values_equal(Decimal("19.99"), 19.98, 0.0)
