@@ -131,7 +131,7 @@ class PandasBackend:
     def key_map(self, key: str, columns) -> dict:
         cols = list(columns)
         sub = self.df[[key, *cols]].dropna(subset=[key])
-        return {
-            row[key]: tuple(row[c] for c in cols)
-            for _, row in sub.iterrows()
-        }
+        keys = sub[key].tolist()
+        # zip the column lists into per-row tuples -- ~100x faster than iterrows
+        values = list(zip(*(sub[c].tolist() for c in cols), strict=True)) if cols else [() for _ in keys]
+        return dict(zip(keys, values, strict=True))

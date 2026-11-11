@@ -196,3 +196,66 @@ def test_value_parity_sql_pushdown_parity(tmp_path):
     assert sql_obs["only_in_primary"] == 1
     assert sql_obs["only_in_reference"] == 1
     assert sql_obs["compared_keys"] == 3
+
+
+# --- bug fixes from the second review (type coercion, self-join, both-paths) ---
+
+def test_values_equal_edge_cases():
+    assert not _values_equal("007", "7", 0.0)       # numeric-looking strings stay strings
+    assert not _values_equal("1e3", "1000", 0.0)
+    assert _values_equal(float("inf"), float("inf"), 0.0)
+    assert not _values_equal(2**53 + 1, 2**53, 0.0)  # big ints keep precision
+    assert _values_equal("10.0", 10.0, 0.0)          # number vs its string form
+    assert _values_equal(Decimal("10.00"), 10.0, 0.0)
+
+
+@pytest.mark.parametrize(
+    "pv, rv, tol, expected",
+    [
+        (["007"], ["7"], 0.0, 1),     # strings differ
+        (["abc"], ["abc"], 0.0, 0),
+        ([10.0], [10.4], 0.0, 1),
+        ([10.0], [10.4], 0.5, 0),     # within tolerance (pushed down too)
+        ([None], [None], 0.0, 0),     # both null -> equal
+        ([None], [5.0], 0.0, 1),      # one null -> differ
+        ([10.0], [10.0], 0.0, 0),
+    ],
+)
+def test_value_parity_both_paths_agree(tmp_path, pv, rv, tol, expected):
+    """Every comparison case must give the same answer in-memory and same-engine."""
+    from sqlalchemy import create_engine
+
+    from trueset import SQLAlchemyBackend
+
+    prim = pd.DataFrame({"id": [1], "v": pv})
+    ref = pd.DataFrame({"id": [1], "v": rv})
+    chk = ValueParity(key="id", columns=["v"], reference="r", tolerance=tol)
+    mem = chk.evaluate(PandasBackend(prim), PandasBackend(ref)).observed["mismatched_values"]
+
+    eng = create_engine(f"sqlite:///{tmp_path / 'p.db'}")
+    prim.to_sql("a", eng, index=False)
+    ref.to_sql("b", eng, index=False)
+    sql = chk.evaluate(SQLAlchemyBackend(eng, "a"), SQLAlchemyBackend(eng, "b")).observed[
+        "mismatched_values"
+    ]
+    assert mem == sql == expected
+
+
+def test_reconcile_table_against_itself(tmp_path):
+    """Self-reconciliation must not crash (value_parity) or silently pass
+    (referential_integrity) -- the join/subquery alias the reference table."""
+    from sqlalchemy import create_engine
+
+    from trueset import SQLAlchemyBackend
+    from trueset.reconcile import ReferentialIntegrity
+
+    eng = create_engine(f"sqlite:///{tmp_path / 's.db'}")
+    pd.DataFrame({"id": [1, 2, 3], "child": [1, 2, 9]}).to_sql("t", eng, index=False)
+    a = SQLAlchemyBackend(eng, "t")
+    b = SQLAlchemyBackend(eng, "t")
+
+    vp = ValueParity(key="id", columns=["child"], reference="self").evaluate(a, b)
+    assert vp.observed["mismatched_values"] == 0  # a table always equals itself
+
+    ri = ReferentialIntegrity(column="child", reference="self", ref_column="id").evaluate(a, b)
+    assert ri.observed == 1  # child=9 has no matching id (was silently 0 before)

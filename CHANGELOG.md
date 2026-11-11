@@ -26,13 +26,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and the runnable `examples/airflow_dq_dag.py` / `examples/dagster_dq_check.py`.
 
 ### Changed
-- **Reconciliation pushes down as SQL when both sides share one database.**
-  `value_parity` (no duplicate keys, exact compare) uses an inner join for value
-  mismatches and anti-joins for only-in-each; `referential_integrity` uses a
-  `NOT EXISTS` anti-join instead of pulling the reference's distinct keys into
-  memory and sending them back as an `IN (...)` list. Across *different* engines
-  (what makes CSV-vs-warehouse checks possible), the portable in-memory path is
-  used. Both paths return identical counts (parity-tested, pandas vs SQLite).
+- **Reconciliation pushes down as SQL when both sides share one database** —
+  including with `tolerance`. `value_parity` (no duplicate keys) uses an inner
+  join for value mismatches (numeric columns honour `tolerance` in SQL) and
+  anti-joins for only-in-each; `referential_integrity` uses a `NOT EXISTS`
+  anti-join instead of pulling the reference's distinct keys into memory as an
+  `IN (...)` list. Across *different* engines (what makes CSV-vs-warehouse checks
+  possible), the portable in-memory path is used. Both paths return identical
+  counts (parity-tested across many cases, pandas vs SQLite).
 - **`value_parity` compares values type-aware, with an optional `tolerance`.**
   Cross-engine storage differences no longer read as false mismatches:
   `Decimal('10.00')`, `10.0` and `'10.0'` are equal; two missing values
@@ -45,6 +46,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   headline. Updated README, landing page, docs, and package metadata/keywords.
 
 ### Fixed
+- **`value_parity` comparison correctness** (found in review of the new code):
+  numeric-looking strings are no longer coerced to numbers, so `'007' != '7'` and
+  `'1e3' != '1000'` (a leading-zero SKU/zip no longer silently passes); `inf`
+  equals itself; integers above 2^53 keep full precision; the in-memory and
+  same-engine SQL paths now return the same answer for every comparison case
+  (parity-tested).
+- **Reconciling a table against itself** no longer crashes `value_parity`
+  (`ambiguous column name`) or makes `referential_integrity` silently return 0 —
+  the reference table is aliased in the join and the anti-join subquery.
+- The pandas `key_map` builds its dict with a vectorized `zip` instead of
+  `iterrows` (~100× faster on large frames).
 - CI: the `tutorials/` video-render scripts (throwaway Pillow/ffmpeg code) are now
   excluded from `ruff`, which runs repo-wide — they had been failing the lint job.
 - **Honesty of the docs** — corrected claims that outran the code: single-table

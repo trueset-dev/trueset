@@ -19,17 +19,20 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import (
     Float,
     MetaData,
     Table,
+    and_,
     cast,
     distinct,
     exists,
     func,
     not_,
+    or_,
     select,
 )
 from sqlalchemy.engine import Engine
@@ -239,7 +242,8 @@ class SQLAlchemyBackend:
         Only valid when both tables live in the same database (the caller checks).
         """
         col = self._col(column)
-        ref_has = exists().where(ref_backend._col(ref_column) == col)
+        ref = ref_backend.table.alias()  # alias -> correct even for a self-join
+        ref_has = exists().where(ref.c[ref_column] == col)
         stmt = (
             select(func.count())
             .select_from(self.table)
@@ -249,15 +253,17 @@ class SQLAlchemyBackend:
         return int(self._scalar(stmt))
 
     def _key_join(self, ref_backend: SQLAlchemyBackend, key: str, ref_key: str):
-        """An inner join of the two tables on their (non-null) keys."""
-        kcol, rkey = self._col(key), ref_backend._col(ref_key)
-        join = self.table.join(ref_backend.table, kcol == rkey)
-        return join, kcol
+        """An inner join of the two tables on their non-null keys. The reference
+        table is aliased, so reconciling a table against itself is unambiguous."""
+        ref = ref_backend.table.alias()
+        kcol = self._col(key)
+        join = self.table.join(ref, kcol == ref.c[ref_key])
+        return join, kcol, ref
 
     def count_common_keys(self, ref_backend: SQLAlchemyBackend, key: str, ref_key: str) -> int:
         """Keys present on both sides. Only called when neither side has duplicate
         keys, so the inner join is 1:1 and this equals the distinct common count."""
-        join, kcol = self._key_join(ref_backend, key, ref_key)
+        join, kcol, _ = self._key_join(ref_backend, key, ref_key)
         return int(self._scalar(select(func.count()).select_from(join).where(kcol.is_not(None))))
 
     def count_value_mismatches(
@@ -267,22 +273,40 @@ class SQLAlchemyBackend:
         columns: Sequence[str],
         ref_key: str,
         ref_columns: Sequence[str],
+        tolerance: float = 0.0,
     ) -> int:
-        """Shared keys whose compared columns differ (null-safe, exact).
+        """Shared keys whose compared columns differ -- pushed down, null-safe.
 
-        A same-engine inner join where ANY (column, ref_column) pair
-        `IS DISTINCT FROM` its counterpart. Pushed down; nothing is materialized.
-        Valid only for exact comparison with no duplicate keys (the caller checks).
+        Inner join (reference aliased) where ANY compared pair differs. A numeric
+        column with ``tolerance`` differs when it is null on exactly one side, or
+        both are present and ``abs(a - b) > tolerance``; every other column uses
+        ``IS DISTINCT FROM`` (exact, null-safe). Nothing is materialized.
         """
-        join, kcol = self._key_join(ref_backend, key, ref_key)
-        differs = _or([
-            self._col(c).is_distinct_from(ref_backend._col(rc))
-            for c, rc in zip(columns, ref_columns, strict=True)
-        ])
+        join, kcol, ref = self._key_join(ref_backend, key, ref_key)
+        conds = []
+        for c, rc in zip(columns, ref_columns, strict=True):
+            p, r = self._col(c), ref.c[rc]
+            if tolerance > 0 and _is_numeric_col(p):
+                conds.append(or_(
+                    and_(p.isnot(None), r.is_(None)),
+                    and_(p.is_(None), r.isnot(None)),
+                    and_(p.isnot(None), r.isnot(None), func.abs(p - r) > tolerance),
+                ))
+            else:
+                conds.append(p.is_distinct_from(r))
         stmt = (
-            select(func.count()).select_from(join).where(kcol.is_not(None)).where(differs)
+            select(func.count()).select_from(join).where(kcol.is_not(None)).where(_or(conds))
         )
         return int(self._scalar(stmt))
+
+
+def _is_numeric_col(col) -> bool:
+    """True if a column's Python type is a real number (so tolerance applies)."""
+    try:
+        pt = col.type.python_type
+    except (NotImplementedError, AttributeError):
+        return False
+    return isinstance(pt, type) and issubclass(pt, (int, float, Decimal)) and pt is not bool
 
 
 def _or(conds):

@@ -14,6 +14,7 @@ At run time the Suite resolves that name to a concrete backend and passes it in.
 from __future__ import annotations
 
 import math
+import numbers
 from abc import abstractmethod
 from collections.abc import Sequence
 
@@ -149,17 +150,17 @@ class ValueParity(ReconciliationCheck):
         dup_reference = _duplicate_keys(ref_backend, self.ref_key)
 
         if (
-            self.tolerance == 0
-            and dup_primary == 0
+            dup_primary == 0
             and dup_reference == 0
             and _same_sql_engine(backend, ref_backend)
         ):
-            # Same database, no duplicate keys, exact compare: push the whole
-            # comparison down as SQL -- an inner join for value mismatches and
-            # anti-joins for only-in-each. No table is pulled into memory, and
-            # the result is identical to the in-memory path below.
+            # Same database, no duplicate keys: push the whole comparison down as
+            # SQL -- an inner join for value mismatches (tolerance included) and
+            # anti-joins for only-in-each. No table is pulled into memory, and the
+            # result is identical to the in-memory path below.
             mismatched = backend.count_value_mismatches(
-                ref_backend, self.key, self.columns, self.ref_key, self.ref_columns
+                ref_backend, self.key, self.columns, self.ref_key, self.ref_columns,
+                self.tolerance,
             )
             only_primary = backend.count_orphans(self.key, ref_backend, self.ref_key)
             only_reference = ref_backend.count_orphans(self.ref_key, backend, self.key)
@@ -254,21 +255,17 @@ def _is_missing(v) -> bool:
         return False
 
 
-def _as_number(v):
-    """float(v) if v is numeric-like (int/float/Decimal/numpy/numeric string), else None.
+def _is_real_number(v) -> bool:
+    """True for a genuine number (int/float/Decimal/numpy), but NOT bool or str."""
+    return isinstance(v, numbers.Number) and not isinstance(v, bool)
 
-    bools are left un-coerced so they're never pulled into tolerance math; an
-    exact bool-vs-int (True/1) still matches via the `==` fallback.
-    """
+
+def _as_number(v):
+    """float(v) for a number or a numeric string, else None (for tolerance math)."""
     if isinstance(v, bool):
         return None
-    if isinstance(v, str):
-        try:
-            return float(v.strip())
-        except ValueError:
-            return None
     try:
-        f = float(v)
+        f = float(v.strip()) if isinstance(v, str) else float(v)
     except (TypeError, ValueError):
         return None
     return None if math.isnan(f) else f
@@ -277,17 +274,32 @@ def _as_number(v):
 def _values_equal(x, y, tol: float) -> bool:
     """Type- and tolerance-aware equality for a single compared value.
 
-    Removes cross-engine false mismatches: `Decimal('10.00')`, `10.0` and `'10.0'`
-    are equal; two missing values (None/NaN) are equal while one missing differs;
-    numbers within `tol` are equal. Anything non-numeric falls back to `==`.
+    - **Exact equality first**, so big integers, Decimals, strings and infinities
+      are correct: ``2**53+1 != 2**53``, ``inf == inf``, and ``'007' != '7'``
+      (text is never silently read as a number).
+    - Two missing values (None/NaN) are equal; one-missing differs.
+    - A real number vs its string form (``'10.0'`` vs ``10.0``) is reconciled, and
+      two real numbers are compared within ``tol``. Numeric coercion only happens
+      when **at least one side is a real number** -- two numeric-looking strings
+      are compared as strings.
     """
     mx, my = _is_missing(x), _is_missing(y)
     if mx or my:
         return mx and my
-    nx, ny = _as_number(x), _as_number(y)
-    if nx is not None and ny is not None:
-        return abs(nx - ny) <= tol
-    return x == y
+    try:
+        if x == y:  # exact: ints of any size, Decimal==float, strings, inf
+            return True
+    except TypeError:
+        pass
+    x_num, y_num = _is_real_number(x), _is_real_number(y)
+    # a real number vs its string form: coerce the pair and compare
+    if (x_num and isinstance(y, str)) or (y_num and isinstance(x, str)):
+        nx, ny = _as_number(x), _as_number(y)
+        return nx is not None and ny is not None and abs(nx - ny) <= tol
+    # tolerance between two real numbers (float only for the tolerance step)
+    if tol > 0 and x_num and y_num:
+        return abs(float(x) - float(y)) <= tol
+    return False
 
 
 def _rows_equal(ta, tb, tol: float) -> bool:
