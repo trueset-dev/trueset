@@ -44,7 +44,6 @@ Issues = "https://github.com/trueset-dev/trueset/issues"
 Changelog = "https://github.com/trueset-dev/trueset/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
-spark = ["pyspark>=3.4"]
 sql = ["sqlalchemy>=2.0", "duckdb>=0.10"]
 dev = ["pytest>=7.0", "pyarrow>=12.0", "ruff>=0.6"]
 docs = ["mkdocs-material>=9.5"]

@@ -34,6 +34,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 - CI: the `tutorials/` video-render scripts (throwaway Pillow/ffmpeg code) are now
   excluded from `ruff`, which runs repo-wide — they had been failing the lint job.
+- **Honesty of the docs** — corrected claims that outran the code: single-table
+  checks push down as `count(*)`, but cross-system reconciliation compares the
+  key + compared columns (not whole tables); `matches_regex` pushdown is wired for
+  Postgres/Redshift/MySQL/MariaDB/SQLite (other dialects raise a clear error for
+  that one check). Parity is CI-verified on pandas/DuckDB/SQLite + real Postgres.
+
+### Removed
+- The unused `spark` optional-dependency extra — there was no Spark backend behind
+  it. (A Spark backend may return as a real implementation later.)
 
 ### Docs
 - **How trueset fits your stack** (`docs/how-it-fits.md`) — where trueset runs

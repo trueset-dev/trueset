@@ -50,8 +50,9 @@ checks:
 `value_parity` reports every failure mode at once — mismatched values on shared
 keys, keys only in the primary, keys only in the reference, and duplicate keys.
 Both sides can be *different engines* (a CSV vs a warehouse table), because a
-check only ever talks to the `Backend` protocol. Runs pushed-down on the
-warehouse — full tables never move.
+check only ever talks to the `Backend` protocol — reconciliation compares the
+**key and the compared columns** from each side, not whole tables. (Single-table
+checks like `not_null`/`in_range` push down fully as `count(*)`.)
 
 ## Proof #2 — Corroboration *(newer, experimental)*
 

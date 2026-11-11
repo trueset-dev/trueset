@@ -12,8 +12,19 @@ support a new engine you implement one class; not a single check is rewritten.
 | `DuckDBBackend` | local/embedded SQL, Parquet | `[sql]` |
 | `SQLAlchemyBackend` | Postgres, MySQL/MariaDB, SQLite, Snowflake, BigQuery, Redshift, … | `[sql]` |
 
-On the SQL backends every check is pushed down as `SELECT count(*) … WHERE …`
-executed inside the database — full tables never move across the wire.
+On the SQL backends, **single-table checks** are pushed down as
+`SELECT count(*) … WHERE …` executed inside the database — those tables never
+move across the wire.
+
+!!! note "Two honest limits"
+    - **Cross-system reconciliation** (`value_parity`, `referential_integrity`)
+      does *not* yet fully push down: it compares the **key and compared
+      columns** from each side (which is what lets the two sides be *different*
+      engines). That's fine at moderate scale; same-engine SQL-join pushdown and
+      cross-engine hashing are on the [roadmap](https://github.com/trueset-dev/trueset/blob/main/ROADMAP.md).
+    - **Regex pushdown** (`matches_regex`) is wired for Postgres, Redshift,
+      MySQL/MariaDB and SQLite. Other dialects (e.g. Snowflake, BigQuery) raise a
+      clear "not yet wired" error for that one check type; everything else runs.
 
 ## Run against your warehouse
 
