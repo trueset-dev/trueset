@@ -1,0 +1,18 @@
+/* trueset brand — exact teal from the logo/landing (#0F766E) */
+:root {
+  --md-primary-fg-color: #0F766E;
+  --md-primary-fg-color--light: #14897F;
+  --md-primary-fg-color--dark: #0B5F58;
+  --md-accent-fg-color: #0B5F58;
+  --md-typeset-a-color: #0B5F58;
+}
+
+/* dark mode: brighten teal for contrast on the dark surface */
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #0F766E;
+  --md-accent-fg-color: #2dd4bf;
+  --md-typeset-a-color: #5eead4;
+}
+
+/* keep the "set" in the site title teal, echoing the logo intersection */
+.md-header__title { letter-spacing: -0.3px; }
