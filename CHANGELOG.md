@@ -11,21 +11,40 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   from your results history: a trust score + trend chart, the shift-left data flow
   (rows checked vs. rerouted to quarantine), health by quality dimension (freshness
   as an SLA, completeness, validity, uniqueness, volume, reconciliation), a dense
-  asset table, and an incident feed that **surfaces volume anomalies** — silent
-  failures that pass every check but whose row volume deviates from its baseline.
-  The open-source seed of the hosted hub. See `docs/guides/dashboard.md`.
+  asset table with a **three-state status** (Passing / Warning / Failing — a dataset
+  that passes every check but has a volume or freshness issue reads *Warning*, not
+  green), and an incident feed that **surfaces volume anomalies** (silent failures
+  that pass every check but whose row volume deviates from its baseline). Includes a
+  "Runs on any warehouse" reference with the real connection schemes. The
+  open-source seed of the hosted hub. See `docs/guides/dashboard.md`.
 - `run --quarantine` now records the rerouted-row count to the results store
   (`rows_quarantined` on `trueset_runs`), so the dashboard's data-flow panel
   reflects real runs, not just estimates.
-- End-to-end **Test drive** walkthrough (`docs/test-drive.md`): file validation →
-  cross-system reconciliation → a live Postgres warehouse → importing dbt tests →
-  quarantine → the dashboard.
+- **Orchestration recipes** — run trueset as a pipeline step (a gate, or
+  quarantine-and-continue) in Airflow, Dagster, Prefect, and CI, via its exit code
+  and Python API. No new runtime dependencies. See `docs/guides/orchestration.md`
+  and the runnable `examples/airflow_dq_dag.py` / `examples/dagster_dq_check.py`.
 
 ### Changed
 - **Positioning: any warehouse, not just DuckDB.** Messaging now leads with any
   SQLAlchemy-supported warehouse (Snowflake, BigQuery, Databricks, Postgres,
   Redshift); DuckDB is presented as the zero-setup *local* engine, not the
   headline. Updated README, landing page, docs, and package metadata/keywords.
+
+### Fixed
+- CI: the `tutorials/` video-render scripts (throwaway Pillow/ffmpeg code) are now
+  excluded from `ruff`, which runs repo-wide — they had been failing the lint job.
+
+### Docs
+- **How trueset fits your stack** (`docs/how-it-fits.md`) — where trueset runs
+  (pipeline vs. warehouse vs. across systems), and how it compares to dbt.
+- **Trusting volatile data** (`docs/trusting-volatile-data.md`) — the ambiguity
+  story generalized beyond commodities (IoT, energy, observability, fraud, …), with
+  the four moves (corroboration, annotate-and-flow, adjudication, segment bounds).
+- End-to-end **Test drive** (`docs/test-drive.md`): file → reconciliation →
+  Postgres → dbt → quarantine → dashboard.
+- **`ARCHITECTURE.md`** + a contributor on-ramp (issue-chooser links, CONTRIBUTING
+  and README pointers, the `good first issue` label).
 
 ## [0.3.0] - 2026-07-25
 
