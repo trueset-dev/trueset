@@ -89,8 +89,7 @@ class ReferentialIntegrity(ReconciliationCheck):
                                column=self.ref_column,
                                message=f"column '{self.ref_column}' missing in reference")
 
-        allowed = ref_backend.distinct_values(self.ref_column)
-        orphans = backend.count_not_in_set(self.column, list(allowed))
+        orphans = _orphan_count(backend, ref_backend, self.column, self.ref_column)
         return self._result(
             failing=orphans,
             total=backend.row_count(),
@@ -200,6 +199,32 @@ def _duplicate_keys(backend: Backend, key: str) -> int:
     """
     non_null = backend.row_count() - backend.null_count(key)
     return max(0, non_null - backend.distinct_count(key))
+
+
+def _same_sql_engine(a: Backend, b: Backend) -> bool:
+    """True if both backends are SQLAlchemy over the *same* database engine."""
+    try:
+        from .backends.sqlalchemy_backend import SQLAlchemyBackend
+    except ImportError:  # pragma: no cover - sqlalchemy not installed
+        return False
+    return (
+        isinstance(a, SQLAlchemyBackend)
+        and isinstance(b, SQLAlchemyBackend)
+        and str(a.engine.url) == str(b.engine.url)
+    )
+
+
+def _orphan_count(backend: Backend, ref_backend: Backend, column: str, ref_column: str) -> int:
+    """Rows in `backend.column` with no match in `ref_backend.ref_column`.
+
+    Same database -> a pushed-down anti-join (never materializes the keys).
+    Otherwise the portable path: pull the reference's distinct keys and count
+    non-members. Both paths return the identical count.
+    """
+    if _same_sql_engine(backend, ref_backend):
+        return backend.count_orphans(column, ref_backend, ref_column)
+    allowed = ref_backend.distinct_values(ref_column)
+    return backend.count_not_in_set(column, list(allowed))
 
 
 def _is_missing(v) -> bool:

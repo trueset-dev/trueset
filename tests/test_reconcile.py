@@ -139,3 +139,26 @@ def test_values_equal_helper():
     assert not _values_equal(10.0, 10.4, 0.0)
     assert _values_equal("shipped", "shipped", 0.0)
     assert not _values_equal("shipped", "delivered", 0.0)
+
+
+def test_referential_integrity_sql_pushdown_parity(tmp_path):
+    """Same-engine anti-join must return the identical orphan count as the
+    portable distinct-values path."""
+    from sqlalchemy import create_engine
+
+    from trueset import SQLAlchemyBackend
+    from trueset.reconcile import ReferentialIntegrity
+
+    prim = pd.DataFrame({"order_id": [1, 2, 3, 4, 5], "x": [1, 1, 1, 1, 1]})
+    ref = pd.DataFrame({"oid": [1, 2, 3]})  # 4 and 5 are orphans
+    chk = ReferentialIntegrity(column="order_id", reference="src", ref_column="oid")
+
+    pandas_res = chk.evaluate(PandasBackend(prim), PandasBackend(ref))
+
+    eng = create_engine(f"sqlite:///{tmp_path / 't.db'}")
+    prim.to_sql("primary", eng, index=False)
+    ref.to_sql("refs", eng, index=False)
+    sql_res = chk.evaluate(SQLAlchemyBackend(eng, "primary"), SQLAlchemyBackend(eng, "refs"))
+
+    assert pandas_res.observed == sql_res.observed == 2
+    assert pandas_res.status is Status.FAIL and sql_res.status is Status.FAIL

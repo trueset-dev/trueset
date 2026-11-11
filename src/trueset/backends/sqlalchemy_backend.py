@@ -27,6 +27,7 @@ from sqlalchemy import (
     Table,
     cast,
     distinct,
+    exists,
     func,
     not_,
     select,
@@ -229,6 +230,23 @@ class SQLAlchemyBackend:
                 select(kcol, *cols).where(kcol.is_not(None))
             ).fetchall()
         return {r[0]: tuple(r[1:]) for r in rows}
+
+    def count_orphans(self, column: str, ref_backend: SQLAlchemyBackend, ref_column: str) -> int:
+        """Rows whose non-null ``column`` has no match in ``ref_backend.ref_column``.
+
+        A same-engine correlated anti-join (``NOT EXISTS``) that never pulls the
+        reference keys into memory -- unlike the portable distinct-values path.
+        Only valid when both tables live in the same database (the caller checks).
+        """
+        col = self._col(column)
+        ref_has = exists().where(ref_backend._col(ref_column) == col)
+        stmt = (
+            select(func.count())
+            .select_from(self.table)
+            .where(col.is_not(None))
+            .where(not_(ref_has))
+        )
+        return int(self._scalar(stmt))
 
 
 def _or(conds):
